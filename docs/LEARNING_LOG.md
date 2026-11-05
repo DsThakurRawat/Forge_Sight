@@ -137,3 +137,20 @@ Concept checks:
 
 1. What does matching the original archive's SHA-256 prove about our copy?
 2. Why is a missing anomalous mask an error, while normal samples have no mask?
+
+## Stage 1.3: Freeze sample roles before learning from previews
+
+`forgesight/data_manifest.py` verifies the current files against acquisition
+hashes, rejects exact image-byte or decoded-pixel duplicates, and ranks portable
+relative paths with the recorded seed/version. The manifest stores metadata,
+not raw dataset pixels. It assigns 176 fitting, 44 normal validation, four
+development, and 111 final-evaluation samples.
+
+The real dataset had zero byte/pixel duplicate image groups. This does not rule
+out near-duplicate photographs or prove physical-part independence. A second
+build in memory reproduced the manifest bytes. Eight split tests protect
+order-independent assignments, role integrity, mask pairing, duplicate
+rejection, and path boundaries; all 22 current tests passed.
+
+Concept checks: Why must two runs produce identical role assignments? Why do
+zero exact duplicates still leave physical-part independence unverified?

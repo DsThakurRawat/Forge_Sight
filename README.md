@@ -32,8 +32,9 @@ figures and architectural assumptions are not verified project results.
 
 The benchmark domain is MVTec AD `metal_nut`. Its real archive and extracted
 335 images/93 masks have passed structural validation; the license, source
-fingerprint, counts, and split policy are in `docs/DATASET.md`. No split manifest,
-preview, or model prediction exists yet. Final evaluation will use a disclosed custom holdout that excludes
+fingerprint, counts, and split policy are in `docs/DATASET.md`. A frozen manifest
+assigns 176 fit, 44 normal-validation, four development, and 111 holdout samples.
+No loader, preview, or model prediction exists yet. Final evaluation uses a disclosed custom holdout that excludes
 development previews. Controlled physical samples and actual Jetson camera
 validation are separate later evidence.
 
@@ -41,6 +42,12 @@ Repeat the category archive audit without extracting or displaying images:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B scripts/audit_metal_nut_archive.py data/downloads/metal_nut.zip
+```
+
+Verify the frozen split against the current dataset:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_manifest --check
 ```
 
 ## Development

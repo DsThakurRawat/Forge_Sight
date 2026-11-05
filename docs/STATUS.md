@@ -2,8 +2,8 @@
 
 ## Current stage
 
-Stage 1, Substep 1.2: real category archive acquired and all images/masks
-structurally validated and extracted. Stage 1 remains IN PROGRESS. Desktop
+Stage 1, Substep 1.3: duplicate checks and frozen split manifest verified.
+Stage 1 remains IN PROGRESS. Desktop
 preparation is complete; the Jetson hardware audit remains BLOCKED - NOT VERIFIED.
 
 ## Evidence already observed
@@ -77,6 +77,16 @@ Git reported a clean `main` branch after the commit.
 
 ## Open gates
 
+Substep 1.3 verified all current files against acquisition fingerprints and
+found zero byte/pixel duplicate image groups. The frozen manifest assigns
+176 fit, 44 normal validation, 4 development preview, and 111 final-holdout
+samples. A fresh rebuild reproduces its bytes; checksum:
+`14b11ebd03d5107c7ef3478e1c4d20887237e2fbef58601ac043014b8f0e340f`.
+All 22 current tests passed. No previews or inference were performed.
+
+The user authorized the next three Stage 1 substeps and `git push origin main`
+after each verified commit. Actual push results are reported at each checkpoint.
+
 | Gate | Status | Missing evidence |
 | --- | --- | --- |
 | Repeatable minimal PC image environment | DONE on tested host | Pinned install and smoke check reproduced in two isolated environments |
@@ -91,7 +101,7 @@ do not establish a defect-inspection application.
 
 ## Next exact task
 
-After review, Stage 1, Substep 1.3: check duplicate image content and generate
-the frozen split manifest using the recorded version/seed/path-ranking policy.
-Verify role counts and disjointness before any sample previews. Keep Jetson
-hardware, ExecuTorch device inference, and offline edge gates explicitly blocked.
+Stage 1, Substep 1.4: implement and verify the image/mask loader from the frozen
+manifest. This is the second of the three currently authorized substeps.
+Substep 1.5 will generate development-only sample previews. Stop at the Stage 1
+gate before advancing to Stage 2; all Jetson gates remain explicitly blocked.

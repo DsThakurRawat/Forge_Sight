@@ -2,8 +2,8 @@
 
 Stage 1, Substeps 1.1-1.2. Reviewed and locally audited 2026-11-05
 (Asia/Calcutta). The category archive and extracted files have been verified.
-The split policy below is recorded but not implemented; no previews or inference
-have been run.
+The split policy below is implemented in a frozen manifest (Substep 1.3).
+No previews or inference have been run.
 
 ## Source and permitted scope
 
@@ -167,9 +167,8 @@ unchanged and assign roles in a separate manifest before generating previews.
 | One image per anomalous test folder | development_preview | 4 | Learn the data and debug image/mask display |
 | All remaining original test images | final_holdout | 111: 22 normal, 89 anomalous | One final evaluation after configuration is frozen |
 
-Counts agree with the acquired inventory but still assume no cross-role
-duplicate content. Duplicate analysis and role assignment must be verified
-before a split is marked created. No split manifest exists yet.
+Counts agree with the acquired inventory. Substep 1.3 verified zero byte-identical
+and zero decoded-pixel-identical image groups and froze all role assignments.
 
 Deterministic selection rule for the later manifest implementation:
 
@@ -206,14 +205,39 @@ Physical part IDs are not yet verified. Byte/pixel duplicate checks alone cannot
 prove that different photographs show different physical parts. Later camera
 validation requires distinct controlled samples and part-level splitting.
 
+## Frozen manifest: Stage 1.3
+
+`forgesight/data_manifest.py` rebuilt fingerprints for all current source files
+against the acquisition report, checked image byte/pixel duplicates, and assigned
+the recorded roles. Actual counts are 176 fit, 44 normal validation, four
+development previews, and 111 final holdout. No path appears twice; source test
+images cannot enter fitting or normal validation. Changing roles even while
+preserving counts fails validation against the recorded deterministic policy.
+
+Committed metadata lives in `manifests/metal_nut_v1.json` and its `.sha256`
+sidecar. It contains relative paths, ground-truth labels, image/mask hashes,
+geometry, source archive fingerprint, and roles; it contains no image pixels.
+Manifest SHA-256:
+`14b11ebd03d5107c7ef3478e1c4d20887237e2fbef58601ac043014b8f0e340f`.
+A fresh build in memory must reproduce the frozen bytes exactly. The checksum
+detects accidental changes; Git history records deliberate policy revisions.
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_manifest --check
+```
+
+For a fresh checkout with the acquired dataset and preparation report in place,
+the check above verifies the committed manifest. The creation command without
+`--check` is only for a new manifest path; it refuses existing files. Eight new
+split-integrity tests and the existing archive tests passed (22 tests total).
+
 ## Known gaps and next task
 
-Real images and masks are acquired and audited. No inspection loader, split
-manifest, previews, predictions, or model metrics are implemented.
+Real images/masks are audited and the split manifest is frozen. No inspection
+loader, previews, predictions, or model metrics are implemented.
 Defect subtype classification remains unmet: test folder labels are ground truth
 for evaluation, not a prediction mechanism or a supervised training set.
 Physical camera generalization and every Jetson requirement remain unverified.
 
-Next: Stage 1.3, check duplicate image content and implement the recorded
-deterministic split policy as a frozen, auditable manifest. Do that before
-viewing real examples in the later loader/preview step.
+Next: Stage 1.4, implement a manifest-based image/mask loader with integrity
+checks, explicit normal masks, and an explicit gate on final-holdout access.
