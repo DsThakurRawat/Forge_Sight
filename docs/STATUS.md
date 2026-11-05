@@ -2,11 +2,11 @@
 
 ## Current stage
 
-Stage 2, Substep 2.4: licensed source-model download verified against the
-pinned publisher revision; model access/local asset blocker cleared.
+Stage 2, Substep 2.5: isolated CPU export environment and pinned source checkout
+verified through actual CLI startup and structured recipe parsing.
 Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
-is BLOCKED - NOT VERIFIED: device unavailable and export/build environment not
-prepared. No actual model inference has been performed.
+is BLOCKED - NOT VERIFIED: device unavailable; conversion and native runner
+build have not run. No actual model inference has been performed.
 
 ## Evidence already observed
 
@@ -105,6 +105,16 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 2.5 installed a separate WSL/Linux-filesystem environment with
+ExecuTorch 1.5.1+cpu, PyTorch 2.14.0+cpu, and TorchAO 0.18.0. The source checkout
+matches the pinned commit; source and installed config schemas match the
+committed SHA-256. CPU tensor calculation, real exporter CLI startup, structured
+LlmConfig parsing, and dependency compatibility passed. Optional TorchAO GPU
+library warnings are retained. Full conversion compatibility is still untested.
+The hashed package lock was reproduced in a fresh temporary environment.
+Both previous environments' full package inventories remained unchanged.
+All 59 project tests passed. See `docs/EDGE_RUNTIME.md` for commands and limits.
+
 Substep 2.4: the user obtained access and downloaded the five original model
 files. All five matched pinned Hugging Face metadata (LFS SHA-256 for checkpoint
 and tokenizer; Git blob IDs for small files). The checkpoint is 2,471,677,246
@@ -151,9 +161,10 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 2.5: prepare an isolated WSL export environment and matching pinned source
-checkout, then verify the actual exporter CLI/dependency compatibility against
-the acquired files. Preserve the image `.venv` and shared PyTorch environment.
-No installation/export is included in the completed asset-verification substep.
+Stage 2.6: attempt the actual pinned Llama export in the isolated environment,
+retain logs and provenance, and resolve any real quantization/conversion errors.
+Record a `.pte` hash only if conversion succeeds. Preserve earlier evidence
+directories and both existing development environments. An exported artifact
+will still require actual execution and quality checks; it is not Jetson proof.
 Jetson proof remains blocked until actual hardware is available. Independent
 Stage 3 PC work remains permitted after review under the roadmap's blocker rule.

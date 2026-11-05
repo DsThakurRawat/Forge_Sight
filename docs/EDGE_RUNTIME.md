@@ -259,3 +259,91 @@ an empty missing-model-files list and no access blocker. Actual source checkout,
 installed export environment/dependency lock, export, native build, and Jetson
 execution are still unverified. Next is a separate Stage 2.5 export-environment
 setup/compatibility check; it has not been started by this verification step.
+
+## 2.5: Isolated export environment
+
+This substep supersedes the earlier environment-not-installed status. No model
+conversion or runner build was performed. Actual new workstation paths:
+
+- Environment: `/root/.cache/forgesight/et1.5.1/venv`
+- Source: `/root/.cache/forgesight/et1.5.1/executorch`
+- Source HEAD: `3b60683923245cf472b7323426920e15623ba361`
+
+These live on WSL's Linux filesystem. Complete before/after `pip freeze --all`
+inventories matched for both the image `.venv` and shared `/root/pytorch-env`.
+Submodules were not initialized: native runner compilation has separate
+prerequisites. CMake is installed only in the new venv.
+
+| Tool | Observed version |
+| --- | --- |
+| CPython / uv | 3.12.14 / 0.12.15 |
+| ExecuTorch | 1.5.1+cpu |
+| PyTorch / torchvision | 2.14.0+cpu / 0.29.0+cpu |
+| TorchAO | 0.18.0 |
+| transformers | 5.0.0rc1 (pinned upstream example requirement) |
+| torchtune | Git `3c1872ace149f03ef4ffec765d3f0a5fd0399497` (reports 0.0.0) |
+| hydra-core | 1.3.2 |
+| CMake / Ninja | 3.31.10 / 1.13.2 |
+
+The release's [dependency selection](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/install_requirements.py)
+and [Llama requirements](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/examples/models/llama/install_requirements.sh)
+inform `requirements/export.in`. We selected text-export dependencies and CPU
+wheels rather than running the broad upstream development installer. Some
+transitive packages support other backends; their presence proves no backend.
+
+`requirements/pylock.export.toml` records 86 resolved dependencies, distribution
+hashes, and torchtune's Git commit. uv's pylock support is experimental in the
+tested version. This lock targets Linux x86_64 / CPython 3.12, not Windows or
+ARM64. Python, OS, compiler, Git, uv, and isolated source-build tooling are
+outside its reproducibility scope. Bundled pip is separate bootstrap tooling.
+
+To reproduce, open Ubuntu WSL in the project directory. Use a **fresh** root;
+the existing workstation root below must not be overwritten. This uses the
+workstation's existing Python and uv:
+
+```bash
+export FORGESIGHT_EXPORT_ROOT=/root/.cache/forgesight/et1.5.1
+test ! -e "$FORGESIGHT_EXPORT_ROOT" || { echo 'Path exists; inspect or choose another root.'; exit 1; }
+mkdir -p "$FORGESIGHT_EXPORT_ROOT"
+/root/pytorch-env/bin/python3 -m venv "$FORGESIGHT_EXPORT_ROOT/venv"
+git clone --depth 1 --branch v1.5.1 https://github.com/pytorch/executorch.git "$FORGESIGHT_EXPORT_ROOT/executorch"
+test "$(git -C "$FORGESIGHT_EXPORT_ROOT/executorch" rev-parse HEAD)" = 3b60683923245cf472b7323426920e15623ba361
+/root/.local/bin/uv pip sync --python "$FORGESIGHT_EXPORT_ROOT/venv/bin/python" requirements/pylock.export.toml
+/root/.local/bin/uv pip check --python "$FORGESIGHT_EXPORT_ROOT/venv/bin/python"
+```
+
+Check each command succeeds before continuing. Normal setup installs the
+committed lock. For deliberate updates only, regenerate with the tested uv:
+`uv pip compile requirements/export.in --python <export-python> --index-url https://pypi.org/simple --format pylock.toml --output-file requirements/pylock.export.toml`,
+review changes and repeat the fresh-install check.
+
+Actual verification commands run from PowerShell in the project directory:
+
+```powershell
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m forgesight.edge_recipe --checkout /root/.cache/forgesight/et1.5.1/executorch --output artifacts/edge/export_recipe_env_verified
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B scripts/check_export_environment.py --checkout /root/.cache/forgesight/et1.5.1/executorch --config artifacts/edge/export_recipe_env_verified/export_config.yaml --output artifacts/edge/export_environment_v1
+```
+
+Those evidence directories now exist; repeats must use new output names.
+The check validates our recipe through upstream OmegaConf into LlmConfig,
+matches installed and checkout schema hashes to the committed reference,
+performs CPU matrix multiplication (11.0), and runs the pinned source exporter's
+actual `--help` (exit 0). It neither loads a checkpoint nor calls conversion.
+Report: `EXPORT_ENVIRONMENT_VERIFIED_NOT_EXPORTED`; export/inference NOT_RUN.
+
+TorchAO reports failures loading optional `_C_mxfp8` and `_C_cutlass_90a` GPU
+libraries, plus upstream warnings. Raw import and CLI logs are preserved in the
+ignored evidence directory. CPU startup succeeded; 8da4w quantization,
+serialization, operator coverage, and model correctness remain untested.
+Do not infer conversion compatibility from dependency metadata checks.
+
+A fresh temporary venv installed solely from the committed lock and repeated
+dependency and real exporter checks, then was automatically removed. Evidence:
+`artifacts/edge/export_environment_lock_recheck/` and
+`artifacts/edge/export_lock_recheck.log`. All 59 project tests passed in the
+preserved image environment, including recognition of the official +cpu suffix
+and rejection of other release/prerelease versions.
+
+Next is Stage 2.6: attempt actual conversion with retained logs and record a
+`.pte` hash only after success. Native runner build, quality, offline operation,
+and performance remain unverified. Jetson Stage 2 is still BLOCKED - NOT VERIFIED.

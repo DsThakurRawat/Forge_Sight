@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from forgesight.edge_recipe import create_recipe, export_config, validate_export_config
 
@@ -60,6 +61,18 @@ class RecipeTests(unittest.TestCase):
             self.assertEqual(command["argv"][-1], str((output / "export_config.yaml").resolve()))
             with self.assertRaises(FileExistsError):
                 create_recipe(self.profile, self.schema, base / "checkout", base / "weights", output)
+
+    def test_official_cpu_build_matches_release_but_other_versions_do_not(self):
+        with tempfile.TemporaryDirectory(prefix="forgesight-version-") as directory:
+            base = Path(directory)
+            for index, version in enumerate(("1.5.1+cpu", "1.5.1rc1", "1.5.0+cpu")):
+                with patch("forgesight.edge_recipe.importlib.metadata.version", return_value=version):
+                    recipe = create_recipe(self.profile, self.schema, base / "checkout",
+                                           base / "weights", base / str(index))
+                self.assertEqual(recipe["installed_executorch"], version)
+                missing_environment = any("not installed here" in item for item in recipe["blockers"])
+                self.assertEqual(missing_environment, index != 0)
+                self.assertFalse(recipe["ready_to_claim_export"])
 
 
 if __name__ == "__main__":

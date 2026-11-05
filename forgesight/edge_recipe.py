@@ -70,7 +70,8 @@ def create_recipe(profile: dict, schema: dict, checkout: Path, weights: Path, ou
         installed = importlib.metadata.version("executorch")
     except importlib.metadata.PackageNotFoundError:
         installed = None
-    if installed != profile["executorch_version"]:
+    # Official CPU wheels carry a PEP 440 local build suffix (e.g. +cpu).
+    if installed is None or installed.split("+", 1)[0] != profile["executorch_version"]:
         blockers.append("The selected ExecuTorch export environment is not installed here.")
     config_path = (output / "export_config.yaml").resolve()
     recipe = {

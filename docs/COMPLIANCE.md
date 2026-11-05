@@ -2,6 +2,12 @@
 
 No challenge requirement is marked satisfied by repository setup alone.
 
+Stage 2.5 verifies an isolated desktop exporter environment, real CLI startup,
+and structured configuration parsing. No checkpoint was loaded or converted;
+no model inference was performed. Optional GPU-library warnings are retained.
+All device, quality, performance, and offline acceptance requirements below
+remain open.
+
 | Requirement | Status | Acceptance evidence needed |
 | --- | --- | --- |
 | Real surface anomaly detection | NOT VERIFIED | Real model scores/maps and held-out evaluation |

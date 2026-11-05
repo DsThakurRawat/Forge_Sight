@@ -199,3 +199,25 @@ six new integrity tests and all 58 project tests passed. Clear the model-access
 and missing-file blockers while preserving export/build/device NOT VERIFIED.
 Render an updated recipe into a new ignored directory so the earlier evidence
 is preserved. The next separate task prepares an isolated export environment.
+
+## 014: Isolate and lock the CPU exporter before converting weights
+
+Use a new venv and pinned ExecuTorch checkout under WSL's Linux filesystem,
+outside both the image environment and shared CUDA environment. CPU wheels
+avoid adding CUDA packages to a conversion-only environment; this does not
+choose or verify Jetson GPU execution. Use the pinned release's actual
+dependency requirements, not the desktop's older shared PyTorch installation.
+
+Lock 86 resolved dependencies using uv 0.12.15 and PEP 751 pylock format,
+including distribution hashes and torchtune's exact Git commit. This uv format
+is experimental; retain the input specification and tested tool version.
+The lock targets this CPython 3.12/Linux x86_64 setup, not Jetson or Windows.
+VCS source is pinned by commit, not a package-distribution hash; compiler,
+Python, OS, and build-isolation tools are not made reproducible by this lock.
+
+Verify real CLI startup and structured configuration parsing without loading
+weights. TorchAO's optional GPU library load failures are recorded rather than
+suppressed; neither successful imports nor a dependency check proves the later
+8da4w quantization/export path. Accept official +cpu build suffixes when checking
+the selected ExecuTorch release, while rejecting other releases/prereleases.
+The actual model conversion is the next separate step.

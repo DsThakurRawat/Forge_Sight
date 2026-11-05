@@ -140,3 +140,13 @@ A second fresh venv in a temporary Linux directory installed from the same
 requirements file and passed both the dependency and codec checks. The
 temporary directory was then removed automatically. This proves the package
 setup can be repeated on the tested host, not that it works offline or on Jetson.
+
+## Separate exporter environment (Stage 2.5)
+
+The image environment above remains unchanged. Export tools are installed in
+`/root/.cache/forgesight/et1.5.1/venv`, with source alongside it on WSL's Linux
+filesystem. CPU PyTorch 2.14.0+cpu and ExecuTorch 1.5.1+cpu passed actual startup
+and configuration checks. The shared CUDA environment also remains unchanged.
+The 86-dependency lock was reproduced in a fresh temporary venv. See
+[export setup and limitations](EDGE_RUNTIME.md#25-isolated-export-environment)
+for pinned versions, commands, logs, and unresolved conversion/device gates.

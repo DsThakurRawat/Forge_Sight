@@ -255,3 +255,23 @@ Python checkpoint. Six integrity tests and the full 58-test suite passed.
 Source files are ready for export preparation, but no export or inference was
 performed. The separate export environment, native runner build, and actual
 Jetson execution remain next-stage evidence, not consequences of a download.
+
+## Stage 2.5: Prepare the conversion workshop
+
+A virtual environment gives this exporter its own tools, so its newer PyTorch
+does not replace the GPU tools or the small image environment. The source Git
+commit pins the program; the package lock pins its dependencies. CPU wheels
+are sufficient for the startup/config checks performed here and avoid a second
+CUDA stack. This does not establish how fast the eventual Jetson model runs.
+
+Actual checks passed: CPU matrix multiplication returned 11.0, source/installed
+schemas matched the reference hash, our recipe became a real upstream LlmConfig,
+and the pinned checkout's exporter printed its actual help with exit code zero.
+A fresh temporary installation from the lock repeated those checks. Full
+inventories show both older environments unchanged; all 59 project tests pass.
+The CPU build suffix is now recognized without accepting another release.
+
+Optional TorchAO GPU libraries reported load warnings. These did not prevent
+startup, but quantization compatibility remains unproven until real conversion.
+No checkpoint was loaded, no model exported, and no text generated. Next:
+attempt the real export and inspect its result before building a device runner.

@@ -79,7 +79,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 58 current data-integrity and edge-preparation tests:
+Run the 59 current data-integrity and edge-preparation tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
@@ -95,7 +95,9 @@ wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_assets
 ```
 
 The verified source weights are not an exported `.pte` or a successful runtime
-test. The separate export environment has not been installed yet.
+test. A separate CPU export environment now passes real exporter startup and
+configuration parsing. Its [locked setup and checks](docs/EDGE_RUNTIME.md#25-isolated-export-environment)
+are verified on this WSL host; actual conversion and Jetson execution remain open.
 
 ## Development
 
