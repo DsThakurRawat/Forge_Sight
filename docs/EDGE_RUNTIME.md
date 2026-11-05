@@ -99,3 +99,43 @@ Substep 2.2 prepares and validates source-pinned recipe files. Substep 2.3
 prepares a device-only capture harness. Those tools can be tested on the PC,
 but Stage 2 cannot be DONE until actual Llama text is generated through
 ExecuTorch on the Jetson and its provenance/measurements are reviewed.
+
+## 2.2: Source-pinned export/build recipe, not an executed export
+
+`forgesight/edge_recipe.py` renders two ignored files under
+`artifacts/edge/export_recipe_v1/`: `export_config.yaml` and `recipe.json`.
+The YAML file uses valid JSON syntax (a YAML subset), with the candidate's
+checkpoint paths, XNNPACK/quantization settings, BOS/EOS metadata, and lengths.
+The JSON recipe keeps commands as argument lists plus working directories,
+including checkout/download, export, and native target build steps. It never
+executes those commands or installs anything.
+
+`configs/edge_upstream_schema.json` records field names parsed with Python's
+AST parser from the pinned upstream dataclasses, their source commit, and the
+exact source-file fingerprint. The upstream code was read, not imported or
+executed. Recipe validation checks these keys and basic length/backend
+constraints; it is not a full Hydra instantiation or successful export test.
+
+The reviewed [native runner instructions](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/examples/models/llama/README.md)
+use the `llm-release` and `llama-release` CMake workflows. Their names were
+independently checked in both pinned CMake preset files. They remain NOT RUN
+and require an appropriate native Jetson toolchain, dependency environment,
+submodules, and CMake supporting those presets. No Pi toolchain is substituted.
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_recipe
+```
+
+The observed output is `PREPARATION_ONLY_NOT_RUN`, with missing licensed model
+files, absent matching source checkout, and no installed export environment.
+`ready_to_claim_export` is false. Six recipe tests passed, covering schema
+keys, source revision mismatch, lengths, backend substitution, path arguments,
+missing input reporting, and existing-output preservation. No `.pte` was created.
+The output directory must be new; `--output` can select another ignored path.
+
+After model access, download the original checkpoint/params/tokenizer from the
+pinned model revision and retain license notices locally. Verify their actual
+hashes, review dependencies in a separate export environment, and validate the
+recipe with that installed revision before exporting. Native CPU runner build
+and ARM64 ABI checks happen on/for the actual Jetson. This preparation recipe
+does not replace the still-missing reproducible installed dependency lock.

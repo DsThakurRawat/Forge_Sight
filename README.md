@@ -11,6 +11,8 @@ The user reports that the Jetson is currently unavailable.
 Stage 2 preparation has started; actual Llama/ExecuTorch device inference is
 blocked by device unavailability and missing Meta Llama access. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
+The source-pinned export recipe is preparation only; it reports its missing
+inputs and does not download weights, install packages, or create a model.
 
 ## Start here
 

@@ -208,3 +208,15 @@ recorded real WSL host facts and refused the device gate; four new parsing and
 guard tests passed. No packages were installed and no model text was simulated.
 The three-state distinction matters: source review can be verified while export
 is NOT RUN and actual device inference stays BLOCKED - NOT VERIFIED.
+
+## Stage 2.2: A checked recipe is still not an export
+
+The recipe generator writes exact argument lists/configuration without running
+commands. Pin both model and ExecuTorch revisions so that future exports do not
+silently switch APIs or checkpoints. AST-derived field metadata checks the
+configuration against the chosen source without installing the exporter.
+
+Six tests passed. The actual recipe correctly reports missing model access,
+weights, checkout, and export environment. No generated model file or text
+exists. Dependency installation/locking and actual export remain unverified.
+The prior preflight step was successfully pushed as `51cdb0f` before this step.
