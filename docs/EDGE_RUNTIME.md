@@ -96,7 +96,7 @@ It reads route tables without contacting an external service.
 3. Export environment, dependency closure, model export, and runner build not run.
 
 Substep 2.2 prepares and validates source-pinned recipe files. Substep 2.3
-prepares a device-only capture harness. Those tools can be tested on the PC,
+provides a device-only capture harness. Those tools can be tested on the PC,
 but Stage 2 cannot be DONE until actual Llama text is generated through
 ExecuTorch on the Jetson and its provenance/measurements are reviewed.
 
@@ -139,3 +139,70 @@ hashes, review dependencies in a separate export environment, and validate the
 recipe with that installed revision before exporting. Native CPU runner build
 and ARM64 ABI checks happen on/for the actual Jetson. This preparation recipe
 does not replace the still-missing reproducible installed dependency lock.
+
+## 2.3: Device-only capture, pending real execution
+
+`forgesight/edge_capture.py` collects the same preflight and refuses execution
+unless it identifies a Linux ARM64 Jetson Orin Nano candidate. It also checks
+the pinned source checkout, nonempty local artifacts, `.pte` extension, and a
+native little-endian AArch64 ELF runner. There is no desktop override, alternate
+LLM runtime, hosted call, or simulated model response.
+
+On a future real run it fingerprints runner/model/tokenizer/prompt, passes an
+argument list directly to the native runner, and saves raw stdout/stderr,
+return code, elapsed process wall time, sampled RSS, and preflight before/after.
+It bounds execution by timeout and log size. The pinned runner source was
+checked for `model_path`, `tokenizer_path`, `prompt_file`, `max_new_tokens`,
+`temperature`, and `num_bos`; deprecated generation-length flags are avoided.
+The basic prompt is only a runtime smoke test, not the Stage 9 advisory design.
+
+Wall time includes process startup/model loading and is not token latency or
+vision latency. RSS is sampled every 50 ms, can miss peaks, and excludes other
+processes. A route-table snapshot and operator-reported network state do not
+prove offline operation; `offline_status` remains NOT VERIFIED. Exact module,
+memory sufficiency, tokenizer behavior, model/export provenance, linked backend,
+generated content, and device/runtime performance still require actual review.
+
+The report records candidate/requested model IDs, not an automatic inspection
+of model identity inside the artifact. A source checkout's HEAD does not attest
+how an arbitrary binary was built. Match export/build logs, input/checkpoint
+hashes and revisions to the artifact hashes when actual assets exist. Nonempty
+stdout can contain echoed prompts or diagnostics, so even a successful process
+is only CAPTURED_NOT_VERIFIED; it cannot automatically pass the Stage 2 gate.
+
+Actual PC refusal test:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_capture --output artifacts/edge/pc_capture_attempt_v1
+```
+
+Observed exit 2 and ignored `run.json`: BLOCKED_NOT_VERIFIED, missing target
+identity/source checkout/runner/model/tokenizer, `process=null`, no generated
+text, and Stage 2 NOT VERIFIED. No runner process was started.
+
+Only after device audit, model access, real export, and native runner build,
+run on the Jetson with paths appropriate to that checkout:
+
+```sh
+python3 -B -m forgesight.edge_capture --output artifacts/edge/jetson_capture_v1 --network-state connected
+```
+
+Use the actual observed network state; `physically_disconnected` is an operator
+declaration, not a software-certified offline result. Output directories must
+be new. Failure, timeout, or empty stdout remains FAILED_NOT_VERIFIED; a captured
+run still needs its actual text/provenance reviewed. Stage 10 remains the full
+offline system gate.
+
+Six new capture tests passed; all 52 project tests passed together. The process
+tests use real generic Python children for log/exit/timeout behavior, with no
+pretend Llama generation, model artifacts, or Jetson success report.
+
+## Stage 2 gate after these three preparation steps
+
+Preparation tooling is tested, but model access, installed dependency closure,
+export, target compilation, real generated text, and measured on-device
+execution remain BLOCKED or NOT RUN. Stage 2 is not DONE. Keep this gate open
+while proceeding with independent PC vision work only after review, as allowed
+by the roadmap. The next independent task is Stage 3.1: inspect compatible
+PatchCore/EfficientAD baseline options for this PC without consuming the final
+holdout. Resume actual Stage 2 execution when model/device access is available.

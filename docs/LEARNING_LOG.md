@@ -220,3 +220,21 @@ Six tests passed. The actual recipe correctly reports missing model access,
 weights, checkout, and export environment. No generated model file or text
 exists. Dependency installation/locking and actual export remain unverified.
 The prior preflight step was successfully pushed as `51cdb0f` before this step.
+
+## Stage 2.3: Capture evidence without promoting it to proof automatically
+
+The capture harness refuses non-Jetson execution, checks native runner identity
+at the ELF architecture level, fingerprints local files, and records bounded
+process logs, exit/timeout status, elapsed wall time, and sampled RSS. It does
+not know from a filename whether a model is Llama or whether printed text is
+new generation. Those facts require export/build provenance and text review.
+
+All 52 tests passed. The six capture tests use generic child processes and
+synthetic guard inputs, never fake Llama replies. The actual PC capture attempt
+was blocked before any runner started; generated text is absent. No source tag,
+recipe, exported file, or capture report alone closes the mandatory device gate.
+
+The first two preparation commits (`51cdb0f`, `c06e15e`) were each pushed before
+the next step. Stop after the third push for review. The user can request model
+access while independent Stage 3 PC work proceeds under an explicit Stage 2
+blocker. No Jetson performance or offline success is claimed.

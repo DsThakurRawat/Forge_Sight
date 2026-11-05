@@ -2,7 +2,7 @@
 
 ## Current stage
 
-Stage 2, Substep 2.2: source-pinned recipe generation/validation verified.
+Stage 2, Substep 2.3: device-only capture tooling and PC refusal verified.
 Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
 is BLOCKED - NOT VERIFIED: device unavailable and user has no Meta Llama access.
 
@@ -103,11 +103,19 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
-Substep 2.1 was committed and pushed as `51cdb0f`. Substep 2.2 rendered the
+Substep 2.1 was committed and pushed as `51cdb0f`. Substep 2.2 was committed and
+pushed as `c06e15e`; it rendered the
 ignored recipe/config and validated fields parsed from the pinned upstream
 schema; six new tests passed. The actual recipe reports missing model files,
 source checkout, and export environment, with PREPARATION_ONLY_NOT_RUN. No model
 download, package installation, export, or native compilation was performed.
+
+Substep 2.3 added a native-ARM64/device guard and bounded process/evidence
+capture. Six new tests and the full 52-test suite passed. The actual PC attempt
+saved BLOCKED_NOT_VERIFIED with `process=null` and no generated text; no runner
+was started. Runtime and offline gates remain unverified. The commit containing
+this evidence is the third authorized step; the final report supplies its
+actual hash and push result.
 
 Stage 1 preview commit `323f499` was pushed successfully. The user's own
 `dcba7fb` master-prompt commit is preserved. The new request authorizes the next
@@ -131,6 +139,8 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 2.3: prepare device-only process/evidence capture and test refusal on the
-PC, failure/timeout handling, and provenance recording. Keep actual inference
-blocked and stop for review before Stage 3.
+Stop for review after these three Stage 2 preparation steps and pushes. Actual
+Stage 2 inference remains blocked by missing device/model access and unrun
+export/build setup. After review, Stage 3.1 can inspect compatible PC anomaly
+baselines while keeping this blocker explicit, as permitted by the roadmap.
+Resume device-side Stage 2 proof when hardware and licensed weights are available.

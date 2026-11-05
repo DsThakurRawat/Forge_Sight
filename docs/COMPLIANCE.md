@@ -50,3 +50,11 @@ Model/runtime candidate pinned and sources reviewed in `docs/EDGE_RUNTIME.md`.
 User reports no Meta Llama access. Actual PC preflight identified x86_64 and
 refused a device-only operation. No weights, model export, runner build,
 generated text, device timing, or disconnected execution is verified.
+
+Source-pinned recipe generation and device-only capture guards are now tested.
+All 52 project tests passed, including generic process log/failure/timeout tests.
+A real PC capture attempt recorded no runner process and no generated text.
+Recipe/harness readiness is separate from actual export/runtime proof. A
+successful capture remains pending review; neither source tags, artifact
+filenames, stdout, nor an operator network declaration automatically pass the
+Llama/ExecuTorch or offline requirements.

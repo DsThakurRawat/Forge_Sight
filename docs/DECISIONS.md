@@ -162,3 +162,25 @@ The user explicitly authorized these three steps and a push after each verified
 commit. The first two pushes succeeded before starting the following step;
 the third step's final report records its actual push result. Preserve the
 concurrent local master-prompt edit outside the implementation commits.
+
+## 012: Prepare Stage 2 without fabricating blocked execution
+
+The user accepted Stage 1 and authorized three further steps with pushes.
+The Jetson is unavailable and the user reports no Meta Llama access. Pin the
+1B model revision and ExecuTorch 1.5.1 source, use the upstream XNNPACK candidate,
+and keep actual export/build/inference explicitly blocked. Public source APIs
+and stable documentation differ in current release labels; record that and
+validate recipe fields against a specific commit rather than mix latest APIs.
+
+Preflight reads host facts, recipe generation emits commands without execution,
+and capture requires the actual ARM64 Jetson candidate and local native runner.
+Do not alter either existing Python environment or download gated weights.
+Build dependency installation/locking remains unverified. Capture uses only
+local artifacts and never substitutes another model runtime.
+
+Capture records raw evidence and process-level measurements, not automatic
+compliance. Model and binary provenance, actual generated content, memory
+sampling limitations, and network state need review. The PC refusal and generic
+child-process tests validate tooling; they are not an LLM simulation or Jetson
+proof. Preserve the mandatory gate while independent PC vision work continues
+after review, as the roadmap permits.
