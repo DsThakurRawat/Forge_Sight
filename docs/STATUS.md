@@ -2,9 +2,11 @@
 
 ## Current stage
 
-Stage 2, Substep 2.3: device-only capture tooling and PC refusal verified.
+Stage 2, Substep 2.4: licensed source-model download verified against the
+pinned publisher revision; model access/local asset blocker cleared.
 Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
-is BLOCKED - NOT VERIFIED: device unavailable and user has no Meta Llama access.
+is BLOCKED - NOT VERIFIED: device unavailable and export/build environment not
+prepared. No actual model inference has been performed.
 
 ## Evidence already observed
 
@@ -103,6 +105,16 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 2.4: the user obtained access and downloaded the five original model
+files. All five matched pinned Hugging Face metadata (LFS SHA-256 for checkpoint
+and tokenizer; Git blob IDs for small files). The checkpoint is 2,471,677,246
+bytes; tokenizer has 128,000 unique base tokens with contiguous ranks. Parameters
+match the source 1B configuration. Source assets are verified, not exported or
+executed. The updated recipe has no missing-model-file/access blockers; source
+checkout, export environment, conversion, target build, and device remain unverified.
+Six new integrity tests passed; all 58 tests passed together. See
+`manifests/llama3_2_1b_assets.json` and `docs/EDGE_RUNTIME.md`.
+
 Substep 2.1 was committed and pushed as `51cdb0f`. Substep 2.2 was committed and
 pushed as `c06e15e`; it rendered the
 ignored recipe/config and validated fields parsed from the pinned upstream
@@ -129,7 +141,7 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Repeatable minimal PC image environment | DONE on tested host | Pinned install and smoke check reproduced in two isolated environments |
 | Exact Jetson hardware and camera | BLOCKED - NOT VERIFIED | Device unavailable; need device-side inventory |
 | Llama through ExecuTorch on Jetson | BLOCKED - NOT VERIFIED | Actual device-generated text, runner/version/hash, memory and timing |
-| Meta Llama checkpoint access | BLOCKED - NOT VERIFIED | User reports no access; licensed original checkpoint/tokenizer unavailable |
+| Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
@@ -139,8 +151,9 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stop for review after these three Stage 2 preparation steps and pushes. Actual
-Stage 2 inference remains blocked by missing device/model access and unrun
-export/build setup. After review, Stage 3.1 can inspect compatible PC anomaly
-baselines while keeping this blocker explicit, as permitted by the roadmap.
-Resume device-side Stage 2 proof when hardware and licensed weights are available.
+Stage 2.5: prepare an isolated WSL export environment and matching pinned source
+checkout, then verify the actual exporter CLI/dependency compatibility against
+the acquired files. Preserve the image `.venv` and shared PyTorch environment.
+No installation/export is included in the completed asset-verification substep.
+Jetson proof remains blocked until actual hardware is available. Independent
+Stage 3 PC work remains permitted after review under the roadmap's blocker rule.

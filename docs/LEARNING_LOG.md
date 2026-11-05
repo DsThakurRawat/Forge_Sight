@@ -238,3 +238,20 @@ The first two preparation commits (`51cdb0f`, `c06e15e`) were each pushed before
 the next step. Stop after the third push for review. The user can request model
 access while independent Stage 3 PC work proceeds under an explicit Stage 2
 blocker. No Jetson performance or offline success is claimed.
+
+## Stage 2.4: Confirm the downloaded model is the intended source asset
+
+The user obtained access and downloaded five files. A filename alone is not
+enough: the checkpoint and tokenizer matched publisher SHA-256 fingerprints,
+and the small files matched the pinned revision's Git objects. A portable
+reference now lets us repeat local verification without authentication or
+network access. No Hub token or credential cache was inspected.
+
+The checkpoint is about 2.47 GB. The original parameter file describes the
+selected 1B configuration; the tokenizer has 128,000 valid base entries with
+unique tokens/ranks. These checks read bytes and JSON rather than loading a
+Python checkpoint. Six integrity tests and the full 58-test suite passed.
+
+Source files are ready for export preparation, but no export or inference was
+performed. The separate export environment, native runner build, and actual
+Jetson execution remain next-stage evidence, not consequences of a download.

@@ -184,3 +184,18 @@ sampling limitations, and network state need review. The PC refusal and generic
 child-process tests validate tooling; they are not an LLM simulation or Jetson
 proof. Preserve the mandatory gate while independent PC vision work continues
 after review, as the roadmap permits.
+
+## 013: Verify source assets before creating an export environment
+
+The user obtained Meta Llama access and downloaded the exact original files
+requested by the recipe. Verify publisher LFS SHA-256 and Git blob fingerprints
+at the pinned revision, then commit only a portable hash/parameter reference.
+Keep all binary assets and Hub cache files ignored. Do not deserialize the
+checkpoint or install PyTorch merely to confirm download integrity.
+
+The offline asset verifier rechecks streaming file hashes, model parameters,
+and tokenizer structure against that reference. All five real files matched;
+six new integrity tests and all 58 project tests passed. Clear the model-access
+and missing-file blockers while preserving export/build/device NOT VERIFIED.
+Render an updated recipe into a new ignored directory so the earlier evidence
+is preserved. The next separate task prepares an isolated export environment.

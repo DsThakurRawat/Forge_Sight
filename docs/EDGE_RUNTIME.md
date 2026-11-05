@@ -22,8 +22,9 @@ Primary source review:
 
 - [Model API](https://huggingface.co/api/models/meta-llama/Llama-3.2-1B-Instruct)
   supplied the revision, original file list, and `manual` access gate. The user
-  explicitly reports having no Meta Llama access. No credentials were requested
-  or inspected and no weights were downloaded.
+  initially reported having no Meta Llama access. In Substep 2.4 the user obtained
+  access and downloaded the pinned source assets. No credentials were requested
+  or inspected by the verification tools.
 - [Model license](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/9213176726f574b556790deb65791e0c5aa438b6/LICENSE.txt)
   is the Llama 3.2 Community License with its Acceptable Use Policy, rather than
   the dataset's Creative Commons license. Review attribution/notice, license-copy,
@@ -92,7 +93,8 @@ It reads route tables without contacting an external service.
 ## Current blockers and next tasks
 
 1. Device unavailable: exact Jetson facts, target build, and generated text absent.
-2. User has no Meta Llama access: checkpoint/tokenizer/license access unresolved.
+2. Source model access/download blocker cleared in 2.4; user-confirmed access
+   and all five publisher-matching local source files are recorded below.
 3. Export environment, dependency closure, model export, and runner build not run.
 
 Substep 2.2 prepares and validates source-pinned recipe files. Substep 2.3
@@ -199,10 +201,61 @@ pretend Llama generation, model artifacts, or Jetson success report.
 
 ## Stage 2 gate after these three preparation steps
 
-Preparation tooling is tested, but model access, installed dependency closure,
-export, target compilation, real generated text, and measured on-device
+Preparation tooling and downloaded source assets are verified, but installed
+dependency closure, export, target compilation, real generated text, and measured on-device
 execution remain BLOCKED or NOT RUN. Stage 2 is not DONE. Keep this gate open
 while proceeding with independent PC vision work only after review, as allowed
 by the roadmap. The next independent task is Stage 3.1: inspect compatible
 PatchCore/EfficientAD baseline options for this PC without consuming the final
 holdout. Resume actual Stage 2 execution when model/device access is available.
+
+## 2.4: Actual source-model acquisition verified
+
+The user confirmed access approval and completed the pinned download into
+`models/llama3_2_1b/`. The verifier checked public metadata at the exact model
+revision, not a moving branch, without reading authentication tokens. All five
+files matched the publisher's sizes and object fingerprints. Large LFS objects
+were compared using their published SHA-256; small files were compared using
+their Git blob IDs. SHA-256 was additionally recorded for every local file.
+
+| File | Actual bytes | Publisher check |
+| --- | --- | --- |
+| `original/consolidated.00.pth` | 2,471,677,246 | LFS SHA-256 matches |
+| `original/params.json` | 220 | Git blob matches |
+| `original/tokenizer.model` | 2,183,982 | LFS SHA-256 matches |
+| `LICENSE.txt` | 7,712 | Git blob matches |
+| `USE_POLICY.md` | 6,021 | Git blob matches |
+
+Checkpoint SHA-256:
+`fc17d497df5e4175b3a8acb4f5865b26f7fc1b009b25bef814b95fde10e8a1f3`.
+Tokenizer SHA-256:
+`82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55`.
+Parameters describe 16 layers, hidden dimension 2048, 32 attention heads,
+eight KV heads, and vocabulary size 128,256. The tokenizer contains 128,000
+valid base64 token entries with unique tokens and contiguous ranks; reserved
+special tokens are separate. No checkpoint deserialization or inference was
+used to verify these files.
+
+`manifests/llama3_2_1b_assets.json` commits metadata/fingerprints only. The
+weights, tokenizer, license/policy copies, Hub cache, and verification reports
+remain local under ignored paths. `configs/edge_llama.json` now records access
+granted and source assets verified. This does not prove tokenization during
+generation, export correctness, quantized quality, memory fit, or edge execution.
+
+Repeat offline verification against the publisher-checked committed reference:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_assets
+```
+
+Observed result: five files verified, 128,000 tokenizer base entries,
+`ASSETS_VERIFIED_NOT_EXPORTED`, and inference NOT_RUN. Six new tests cover
+integrity success, same-size corruption, missing files, path escape, duplicate
+tokenizer ranks, and noncontiguous ranks. All 58 project tests passed.
+
+A new ignored recipe at `artifacts/edge/export_recipe_assets_verified/` reflects
+the current assets without overwriting the earlier blocked recipe. It reports
+an empty missing-model-files list and no access blocker. Actual source checkout,
+installed export environment/dependency lock, export, native build, and Jetson
+execution are still unverified. Next is a separate Stage 2.5 export-environment
+setup/compatibility check; it has not been started by this verification step.

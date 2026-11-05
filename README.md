@@ -9,11 +9,13 @@ a frozen split, role-based image/mask loader, and inspected development previews
 no inspection application, trained model, or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
 Stage 2 preparation has started; actual Llama/ExecuTorch device inference is
-blocked by device unavailability and missing Meta Llama access. See
+blocked by device unavailability and unprepared export/build tooling. The user
+has obtained Meta Llama access; all five original source files match the pinned
+publisher revision. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The capture harness also refuses this PC as a Jetson target. All 52 project
+The capture harness also refuses this PC as a Jetson target. All 58 project
 tests pass; there is still no exported Llama artifact or generated model text.
 
 ## Start here
@@ -77,7 +79,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 52 current data-integrity and edge-preparation tests:
+Run the 58 current data-integrity and edge-preparation tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
@@ -85,6 +87,15 @@ wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
 
 Read the Stage 2 [candidate, blockers, recipe, and capture instructions](docs/EDGE_RUNTIME.md)
 before installing export dependencies or attempting a device run.
+
+Verify the downloaded source model against the publisher-checked reference:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_assets
+```
+
+The verified source weights are not an exported `.pte` or a successful runtime
+test. The separate export environment has not been installed yet.
 
 ## Development
 

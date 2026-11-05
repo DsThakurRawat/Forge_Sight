@@ -47,7 +47,8 @@ Jetson runtime, or offline compliance.
 ## Stage 2 source/preflight evidence
 
 Model/runtime candidate pinned and sources reviewed in `docs/EDGE_RUNTIME.md`.
-User reports no Meta Llama access. Actual PC preflight identified x86_64 and
+The initial review recorded no Meta Llama access (cleared in Substep 2.4).
+Actual PC preflight identified x86_64 and
 refused a device-only operation. No weights, model export, runner build,
 generated text, device timing, or disconnected execution is verified.
 
@@ -58,3 +59,9 @@ Recipe/harness readiness is separate from actual export/runtime proof. A
 successful capture remains pending review; neither source tags, artifact
 filenames, stdout, nor an operator network declaration automatically pass the
 Llama/ExecuTorch or offline requirements.
+
+Substep 2.4 verified all five acquired original model files against the pinned
+publisher revision. User-confirmed access and local source assets are now
+verified; fingerprint metadata is committed and all model bytes stay ignored.
+All 58 tests passed. This clears the source-asset blocker only: no model export,
+generated text, native target build, device execution, or offline proof exists.
