@@ -2,11 +2,12 @@
 
 ## Current stage
 
-Stage 2, Substep 2.6: actual quantized Llama export completed; artifact
-fingerprint, serialized XNNPACK delegation, and program metadata loading verified.
+Stage 2, Substep 2.7: actual desktop Llama generation through ExecuTorch verified.
+The exported PTE and tokenizer retain their recorded fingerprints; the native
+runner produced a coherent response to the controlled lighting prompt.
 Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
-is BLOCKED - NOT VERIFIED: device unavailable; native runner/generation are not
-verified. No actual model text generation has been performed.
+on Jetson is BLOCKED - NOT VERIFIED: the device is unavailable. Desktop text
+generation is verified; device execution, quality, and offline proof are not.
 
 The organizer reply shared by the user confirms Jetson Orin platform-family
 eligibility for PS5, conditional on mandatory Llama, on-device ExecuTorch, and
@@ -111,6 +112,19 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 2.7 uses the installed native TextLLMRunner via its Python bindings,
+with no new packages or compilation. The first attempt failed on unregistered
+4-bit embedding/cache/attention kernels. Explicitly loading the wheel's two
+quantized/custom-op libraries resolved registration; failed logs remain saved.
+The final actual run exited 0, with 33 prompt tokens and 30 generated tokens
+reported by native Stats (31 callback pieces including the end marker).
+The generated sentence explains consistent lighting without claiming inspection.
+The generate call took 4.08 seconds including lazy model load; native inference
+timing was 1.154 seconds. These are single-run desktop observations, not Jetson
+benchmarks. All 67 tests pass. Both original environments remain unchanged.
+Transcript, binaries' fingerprints and measurements are committed in
+`manifests/llama3_2_1b_pc_smoke.json`; raw logs stay ignored.
+
 Substep 2.6 exported the actual pinned checkpoint using 8da4w and 4-bit
 embeddings. Conversion exited 0 after 248.46 seconds on desktop WSL; sampled
 export-process peak RSS was 8,237,948 KiB, not device inference memory. The
@@ -170,7 +184,8 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Exact Jetson hardware and camera | BLOCKED - NOT VERIFIED | Device unavailable; need device-side inventory |
 | Llama through ExecuTorch on Jetson | BLOCKED - NOT VERIFIED | Actual device-generated text, runner/version/hash, memory and timing |
 | Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
-| Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and real ExecuTorch program load; generation/quality untested |
+| Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and program metadata; generation has separate evidence and quality remains open |
+| Desktop Llama generation via ExecuTorch | VERIFIED, PC-only smoke | Real native runner output and provenance; no device or advice-quality claim |
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
@@ -180,9 +195,9 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 2.7: establish a desktop ExecuTorch generation smoke test using the
-exported PTE and matching tokenizer. Record actual output and runner provenance;
-diagnose any runtime/operator or tokenization failures. This remains PC-only
-evidence. Preserve the device-only capture guard and the open Jetson gate.
-Jetson proof remains blocked until actual hardware is available. Independent
-Stage 3 PC work remains permitted after review under the roadmap's blocker rule.
+Stage 3.1: check PatchCore/EfficientAD installation and runtime compatibility on
+this PC, then select the first normal/anomaly vision baseline using the existing
+training/validation policy. Do not consume final-holdout images. Fit/train the
+selected baseline in the following focused substep, not in the Llama smoke test.
+Jetson proof remains blocked until hardware is available. Proceed with desktop
+vision work after review under the roadmap's explicit hardware-blocker rule.

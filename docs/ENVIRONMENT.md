@@ -151,5 +151,8 @@ The 86-dependency lock was reproduced in a fresh temporary venv. See
 [export setup and limitations](EDGE_RUNTIME.md#25-isolated-export-environment)
 for pinned versions, commands, and logs. Stage 2.6 subsequently completed actual
 conversion and program metadata loading in that same environment, without
-dependency changes. Generation, quality, and device execution remain unverified;
-see the [actual export record](EDGE_RUNTIME.md#26-actual-model-export).
+dependency changes. Stage 2.7 then generated real text using the wheel's native
+TextLLMRunner, registering its quantized/custom-op libraries explicitly.
+No packages or source builds were added; both original environment inventories
+still match their baseline. Quality, device execution, and offline operation
+remain unverified. See the [generation evidence](EDGE_RUNTIME.md#27-real-desktop-generation).

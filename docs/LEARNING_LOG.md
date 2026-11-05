@@ -300,3 +300,32 @@ reference-mismatch guards. These tests reject generic invalid files; they do
 not simulate a successful model. Both original environments remain unchanged.
 Next is a real desktop generation smoke test; hardware, quality evaluation,
 offline operation, and the mandatory Jetson proof still need separate evidence.
+
+## Stage 2.7: Generate actual text through ExecuTorch
+
+A tokenizer turns our prompt into integer IDs. ExecuTorch runs the exported
+graph to predict the next token, then repeats using its cache until a stop token
+or limit. A chat wrapper tells this instruction-tuned Llama where the user turn
+ends and the assistant answer begins. BOS is included once; echo is disabled
+so a repeated input cannot be mistaken for generated output.
+
+We used the wheel's real native TextLLMRunner through Python bindings instead
+of building another runner or substituting a different runtime. The first
+attempt failed before generation: the wheel's quantized embedding and Llama
+cache/attention kernels were present but not registered. Loading those supplied
+libraries explicitly resolved it. No model/package/source change was needed.
+
+Actual output explains that consistent lighting makes image comparison more
+accurate and reliable, without claiming an inspected part. The tokenizer counted
+33 prompt tokens; native Stats reported 30 generated tokens and the raw callback
+included the end-of-turn marker. The final generate call took 4.08 seconds,
+including lazy model loading; native inference timing alone was 1.154 seconds.
+These single desktop observations cannot predict Jetson latency or p50/p95.
+
+Raw logs, failed-attempt evidence and token callbacks remain local. The committed
+smoke record includes the actual prompt, answer, native statistics and binary
+fingerprints. All 67 tests pass; new unit tests cover input/control/token-budget
+guards without simulated generation. Desktop generation works, but quantized
+advisory quality, actual Jetson execution and offline end-to-end inspection
+remain open. Next, select a compatible vision baseline in Stage 3.1; fitting
+or training follows that selection.

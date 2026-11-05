@@ -35,10 +35,11 @@ No model/runtime substitution or architecture change is needed from this reply.
 | On-device detection and quality control without cloud dependency | Local vision, deterministic grading, local logs, and separate asynchronous Llama worker | Actual disconnected end-to-end device run, including local assets and cold start |
 | Technical report | Record actual hardware, software, model deployment, and inference flow | Completed device-specific report backed by observed commands and results |
 
-Stage 2.6 has a real desktop export and verified program metadata. It has no
-generated model text and no verified Jetson execution. The next task remains
-Stage 2.7, a desktop ExecuTorch generation smoke test; that test cannot close
-the on-device gate. Downloading/exporting on the PC is preparation for local
+Stage 2.7 now has real desktop generation through ExecuTorch, following the
+verified export. It does not close the on-device gate: Jetson execution and
+offline operation remain unverified. Independent desktop vision work may
+proceed under the roadmap's hardware-blocker rule. Downloading/exporting on the
+PC is preparation for local
 deployment; normal inspection operation must not depend on that PC or a cloud
 service. Keep the roadmap's offline and device acceptance criteria unchanged.
 

@@ -1,9 +1,9 @@
 # Stage 2: Llama through ExecuTorch on the actual Jetson
 
 Initial review: 2026-11-05 (Asia/Calcutta). Stage 2 device proof remains
-BLOCKED - NOT VERIFIED. Substep 2.6 completed actual desktop export and program
-metadata loading; no Llama generation, device benchmark, or offline inference
-has been performed. Earlier substep sections retain their historical snapshots.
+BLOCKED - NOT VERIFIED. Substep 2.7 completed real desktop generation after
+actual export; no Jetson generation, device benchmark, or disconnected run has
+been performed. Earlier substep sections retain their historical snapshots.
 
 The [organizer reply shared by the user](ORGANIZER_CLARIFICATION.md) accepts
 Jetson Orin platform-family eligibility for PS5. Mandatory on-device Llama via
@@ -446,3 +446,114 @@ Next, Stage 2.7 tests actual desktop token generation through ExecuTorch with
 the matching tokenizer and exported model. PC output cannot close the mandatory
 Jetson/device or offline gates. Quantized quality and real operator advice
 require later evaluation even after a generation smoke test succeeds.
+
+## 2.7: Real desktop generation
+
+The recorded PTE now produces actual text through ExecuTorch's native C++
+TextLLMRunner, called via its Python bindings on Linux x86_64 WSL. No other
+model or runtime was substituted and no new packages or source build were
+needed. This supersedes earlier no-generation snapshots. Jetson proof is
+still BLOCKED - NOT VERIFIED.
+
+### Runtime compatibility found by the actual attempt
+
+The first attempt, `artifacts/edge/pc_generation_attempt_01/`, exited 1 before
+generating text. The runtime reported 49 instructions missing registrations
+across three operator types: quantized_decomposed::embedding_4bit.dtype_out,
+llama::update_cache.out, and llama::custom_sdpa.out. Metadata loading alone had
+not tested these operators. All failed-attempt logs and its empty output remain
+preserved; no success was inferred from loading the program metadata.
+
+The wheel contains the needed kernels but does not auto-load both libraries
+for TextLLMRunner. The worker now registers them using torch.ops.load_library:
+
+- `lib/libexecutorch_kernels_quantized.so`
+- `extension/llm/custom_ops/libcustom_ops_aot_lib.so`
+
+Both are located under the installed executorch package, not arbitrary system
+paths. Their static registrations feed the wheel's shared ExecuTorch runtime.
+Native registry inspection changed all three missing operator types from absent
+to present, and the following actual generation succeeded. The native runner
+binding and both kernel libraries have sizes/hashes in the smoke manifest.
+The exported model/tokenizer retain their earlier verified fingerprints.
+
+Relevant upstream source is pinned to the existing ExecuTorch commit:
+[native bindings](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/extension/llm/runner/pybindings.cpp),
+[runner/helper](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/extension/llm/runner/llm_runner_helper.cpp),
+and [custom-kernel build](https://github.com/pytorch/executorch/blob/3b60683923245cf472b7323426920e15623ba361/extension/llm/custom_ops/CMakeLists.txt).
+The simple user/assistant prompt follows Meta's
+[Llama 3 chat format](https://github.com/meta-llama/llama-models/blob/main/models/llama3/chat_format.py).
+The installed C++ TikToken tokenizer was checked to encode the control markers
+as 128000/128006/128007/128009, with exactly one BOS. num_bos/num_eos are zero
+because the formatted prompt already contains its control tokens.
+
+### Actual input and output
+
+Prompt from `configs/edge_smoke_prompt.txt`:
+
+> In one sentence, explain why stable lighting helps compare two inspection images. Do not claim that you inspected a part.
+
+Actual answer (the raw evidence additionally retains `<|eot_id|>`):
+
+> Stable lighting helps compare two inspection images by ensuring that the lighting conditions are consistent, allowing the comparison of the images to be more accurate and reliable.
+
+This was reviewed as a coherent general answer with no claim of inspecting a
+part. It is a functional smoke test, not advice-quality validation or evidence
+of a defect-inspection application. Temperature was zero and echo disabled;
+the runner generated the response from the PTE rather than repeating the input.
+
+Final evidence: `artifacts/edge/pc_generation_verified/`. The CLI deliberately
+reports `PC_GENERATION_CAPTURED_REQUIRES_REVIEW`; after reviewing the real
+transcript, `manifests/llama3_2_1b_pc_smoke.json` records the scoped result
+`PC_SMOKE_VERIFIED_NOT_JETSON_PROOF`. That committed record includes the actual
+prompt, raw generated text, binary fingerprints, config, token IDs, native
+statistics, process result, and source/reference hashes. Earlier attempts and
+raw logs remain local/ignored.
+
+| Final single-run desktop observation | Result |
+| --- | --- |
+| Return code / completion | 0 / EXITED |
+| Prompt / native-reported generated tokens | 33 / 30 |
+| Token callback pieces | 31, including the raw end-of-turn marker; not treated as the native token counter |
+| Maximum new tokens / context | 64 / 512 |
+| Native model-load time | 2.902 seconds |
+| Native inference interval | 1.154 seconds |
+| Python generate call | 4.077 seconds, including lazy loading |
+| Whole captured process | 8.893 seconds, including imports and input verification |
+| Sampled process peak RSS | 1,218,376 KiB; 50 ms sampling, may miss peaks and excludes other processes |
+
+These are one desktop run's measurements, not p50/p95 or predicted Jetson
+performance. No warmup or controlled benchmark was performed. Timing scopes
+differ and must not be interchanged. Eight PyTorch threads and OMP_NUM_THREADS=8
+were requested; the manifest does not certify the size of every native pool.
+
+### Repeat the bounded PC smoke test
+
+From PowerShell in this project, choose a new output directory:
+
+```powershell
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m forgesight.edge_pc_smoke --output artifacts/edge/pc_generation_recheck
+```
+
+The parent captures a worker process with a 300-second default timeout and
+16 MiB log bound. It retains stdout/stderr, request, generated.txt, inputs,
+native statistics, and run.json. Existing evidence directories are refused.
+The worker is explicitly desktop-only; the original device capture still
+requires the actual identified Jetson. The tokenizer checks enforce the exported
+prefill/context bounds and the native prompt count must match the precheck.
+
+HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 are set in the worker; all model and
+tokenizer inputs are local. Those flags do not prove network isolation or the
+mandatory disconnected Jetson run. The native loader first tries JSON and logs
+a parse error before successfully selecting TikToken; WSL also reports failed
+ARM CPU-information probes. These raw warnings are preserved, not hidden.
+
+All 67 project tests passed, including four new prompt/control/token-budget
+guard tests without simulated generation. Package compatibility passes and both
+original environment inventories remain unchanged. Advice quality, device
+deployment, camera/vision, and offline end-to-end evidence remain open.
+
+Next is Stage 3.1: check PatchCore/EfficientAD compatibility and select a vision
+baseline using the frozen training/validation policy, without opening the final
+holdout. Fit/train follows the selection in a separate substep. Stage 2's Jetson
+gate stays open under the roadmap's explicit hardware-blocker rule.

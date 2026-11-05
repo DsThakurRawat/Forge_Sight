@@ -259,3 +259,29 @@ software, deployment, and inference flow. Track that report requirement without
 inventing a Jetson configuration or advancing the implementation stage. The
 current desktop export is preparation; next remains the desktop generation
 smoke test, with actual disconnected Jetson proof still mandatory.
+
+## 017: Use the native wheel runner and register its supplied LLM kernels
+
+Use ExecuTorch 1.5.1+cpu's TextLLMRunner C++ bindings in the existing isolated
+environment. This avoids an unnecessary source rebuild or a hand-written
+generation loop. It does not replace the device-only capture guard or change
+the selected model, quantization, runtime, or mandatory Jetson gate.
+
+The first real attempt failed because embedding_4bit.dtype_out,
+llama::update_cache.out, and llama::custom_sdpa.out were not registered. The
+wheel already supplies them in its quantized and LLM custom-op shared libraries.
+Explicit torch.ops.load_library calls register them with the shared runtime;
+real generation then succeeds without dependency changes or compilation.
+Record all three native binaries' fingerprints and preserve the failed attempt.
+
+Use a controlled Llama chat prompt, one explicit BOS, no added BOS/EOS, greedy
+temperature zero and echo disabled. Verify the matching tokenizer, encoded
+control IDs and strict prefill/context budgets. Capture token callbacks and
+native statistics in a bounded child; generated text is reviewed separately
+from runtime exit status. Preserve the raw end-of-turn marker in the evidence.
+The result is a PC functional test, not advice-quality or offline evidence.
+
+All 67 tests pass; unit tests exercise prompt/control/budget guards without
+fake model replies. Both older environment inventories remain unchanged. Next
+is Stage 3.1 vision-baseline compatibility/selection under the roadmap's device
+blocker rule; stop for review before that different stage.

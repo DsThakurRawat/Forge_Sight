@@ -2,11 +2,11 @@
 
 No challenge requirement is marked satisfied by repository setup alone.
 
-Stage 2.6 adds actual quantized model export and successful desktop ExecuTorch
-program-metadata loading with serialized XNNPACK delegation. No generation
-method has been executed and no model-generated text is verified. Optional
-GPU-library warnings are retained. All device, quality, performance, and offline
-acceptance requirements below remain open.
+Stage 2.7 adds real desktop text generation through ExecuTorch's native C++
+runner, using the recorded PTE and tokenizer. The transcript is in
+`manifests/llama3_2_1b_pc_smoke.json`. This is a functional PC smoke test;
+on-device advisory integration and quality evaluation remain open. All device,
+quality, performance, and offline acceptance requirements below remain open.
 
 The [organizer clarification shared by the user](ORGANIZER_CLARIFICATION.md)
 accepts the Jetson Orin platform family for PS5, subject to the mandatory
@@ -86,3 +86,11 @@ ExecuTorch runtime; no forward or token-metadata method is executed. XNNPACK
 delegate presence establishes serialization, not successful operator execution,
 ARM portability, generated content, quantized quality, or offline edge proof.
 All 63 tests passed. The Stage 2 device compliance gate remains open.
+
+Substep 2.7 supersedes the no-generation snapshot: actual desktop generation
+succeeded after registering wheel-provided quantized and LLM custom kernels.
+The runner used local files and generated a general lighting explanation.
+No cloud runtime, Ollama, alternate model, or fake answer was used. Offline
+environment flags are not a network-isolation test. Both the first failure
+and successful evidence are preserved; all 67 tests pass. This supplies no
+Jetson, defect-inspection, calibrated severity, or advisory-quality proof.

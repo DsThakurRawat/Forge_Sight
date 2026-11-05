@@ -8,15 +8,16 @@ and a Llama-family advisory model running on the device through ExecuTorch.
 a frozen split, role-based image/mask loader, and inspected development previews. There is
 no inspection application, trained inspection model, or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
-Stage 2.6 exported the acquired Llama 3.2 1B source model through ExecuTorch.
-The 802,247,040-byte PTE passes fingerprint and program-metadata loading checks;
-its forward graph contains an XNNPACK delegate. Actual Llama/ExecuTorch device
+Stage 2.7 generated real text from the exported Llama 3.2 1B model through
+ExecuTorch's native C++ runner, called from Python on desktop WSL. The original
+PTE/tokenizer fingerprints were verified. Actual Llama/ExecuTorch Jetson
 inference remains blocked by device unavailability. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The capture harness also refuses this PC as a Jetson target. All 63 project
-tests pass; no generation method has been executed and no model text is verified.
+The device capture harness still refuses this PC as a Jetson target. All 67
+project tests pass. Desktop text is real; advice quality, defect detection,
+Jetson performance, and disconnected operation remain unverified.
 
 ## Start here
 
@@ -79,7 +80,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 63 current data-integrity and edge-preparation tests:
+Run the 67 current data-integrity and edge-preparation tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
@@ -97,10 +98,20 @@ wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_assets
 The verified source weights are not an exported `.pte` or a successful runtime
 test. A separate CPU export environment now passes real exporter startup and
 configuration parsing. Its [locked setup and checks](docs/EDGE_RUNTIME.md#25-isolated-export-environment)
-are verified on this WSL host. Actual conversion and program metadata loading
-now pass; generation, quality, and Jetson execution remain open. The
+are verified on this WSL host. Conversion and desktop generation now pass;
+quality and Jetson execution remain open. The
 [export record and verification command](docs/EDGE_RUNTIME.md#26-actual-model-export)
 keep these distinct.
+
+Run the actual desktop generation smoke test with a new evidence directory:
+
+```powershell
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m forgesight.edge_pc_smoke --output artifacts/edge/pc_generation_recheck
+```
+
+This uses local model/tokenizer files, the native ExecuTorch runner, and explicit
+registration of wheel-provided quantized/custom kernels. It does not certify
+offline or Jetson operation. See [the actual transcript and limits](docs/EDGE_RUNTIME.md#27-real-desktop-generation).
 
 ## Development
 
