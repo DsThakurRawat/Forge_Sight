@@ -23,7 +23,16 @@ read-only queries with approved escalation returned the observations above.
 The registry's legacy Windows product-name string differed from the OS query;
 the table uses the Windows management OS caption.
 
-## Jetson: BLOCKED - NOT VERIFIED
+## Platform eligibility clarification
+
+The organizer reply shared by the user on 2026-11-06 accepts NVIDIA Jetson
+Orin as an eligible PS5 platform, subject to mandatory on-device Llama through
+ExecuTorch and local defect/quality-control operation without cloud dependency.
+Continue with the proposed Orin Nano route. See the
+[recorded reply and implications](ORGANIZER_CLARIFICATION.md).
+Platform-family eligibility does not verify our actual module or deployment.
+
+## Jetson device inventory: BLOCKED - NOT VERIFIED
 
 The proposed target is an NVIDIA Jetson Orin Nano. The user confirmed that the
 device is not currently available. Do not infer module variant, RAM, JetPack,

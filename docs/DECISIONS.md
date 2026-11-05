@@ -244,3 +244,18 @@ InternalConsistency program load. Private APIs require review on any runtime
 upgrade. No method is executed; listing methods is not generation or operator
 coverage proof. A newly re-exported artifact may have a different hash and needs
 its own reviewed provenance rather than silently replacing this reference.
+
+## 016: Record organizer acceptance of the Jetson Orin route
+
+The user supplied an organizer reply accepting NVIDIA Jetson Orin as an eligible
+PS5 platform, subject to Llama-family advisory/reasoning, on-device ExecuTorch,
+and on-device defect/quality-control operation without cloud dependency.
+Preserve the supplied reply in `docs/ORGANIZER_CLARIFICATION.md` and continue
+the planned Orin Nano route. Keep platform eligibility separate from the
+unverified physical hardware inventory and actual device compliance.
+
+The reply also explicitly requires the technical report to document hardware,
+software, deployment, and inference flow. Track that report requirement without
+inventing a Jetson configuration or advancing the implementation stage. The
+current desktop export is preparation; next remains the desktop generation
+smoke test, with actual disconnected Jetson proof still mandatory.

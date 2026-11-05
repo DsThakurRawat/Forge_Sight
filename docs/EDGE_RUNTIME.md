@@ -1,8 +1,13 @@
 # Stage 2: Llama through ExecuTorch on the actual Jetson
 
-Reviewed 2026-11-05 (Asia/Calcutta). Stage 2 is BLOCKED - NOT VERIFIED.
-Stage 1 was reviewed by the user's request to continue. No export, Llama
-generation, device benchmark, or offline inference has been performed.
+Initial review: 2026-11-05 (Asia/Calcutta). Stage 2 device proof remains
+BLOCKED - NOT VERIFIED. Substep 2.6 completed actual desktop export and program
+metadata loading; no Llama generation, device benchmark, or offline inference
+has been performed. Earlier substep sections retain their historical snapshots.
+
+The [organizer reply shared by the user](ORGANIZER_CLARIFICATION.md) accepts
+Jetson Orin platform-family eligibility for PS5. Mandatory on-device Llama via
+ExecuTorch and local defect/quality-control operation remain unchanged.
 
 ## 2.1: Candidate and prerequisites
 

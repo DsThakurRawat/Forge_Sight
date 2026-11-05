@@ -8,8 +8,14 @@ method has been executed and no model-generated text is verified. Optional
 GPU-library warnings are retained. All device, quality, performance, and offline
 acceptance requirements below remain open.
 
+The [organizer clarification shared by the user](ORGANIZER_CLARIFICATION.md)
+accepts the Jetson Orin platform family for PS5, subject to the mandatory
+technologies. It clears the platform-eligibility question; actual device
+inventory, runtime, and offline compliance still require measured evidence.
+
 | Requirement | Status | Acceptance evidence needed |
 | --- | --- | --- |
+| Jetson Orin platform-family eligibility for PS5 | CONFIRMED in organizer reply shared by user | Recorded clarification; exact device inventory and deployment remain separate gates |
 | Real surface anomaly detection | NOT VERIFIED | Real model scores/maps and held-out evaluation |
 | Defect type | NOT VERIFIED | Same-domain labeled evaluation; retain `unknown` when unsupported |
 | Severity and operator decisions | NOT VERIFIED | Versioned deterministic rules and behavior tests |
@@ -21,6 +27,7 @@ acceptance requirements below remain open.
 | Physical camera validation | BLOCKED - NOT VERIFIED | Controlled real samples captured and inspected on Jetson |
 | Offline edge operation | BLOCKED - NOT VERIFIED | Disconnected cold start and real end-to-end device run |
 | Real-time performance | NOT VERIFIED | Device vision/advice latency, distinct parts/minute, RAM and thermal observations |
+| Technical report documents hardware, software, deployment, and inference flow | NOT VERIFIED | Actual device configuration, versions/hashes/commands, pipeline description, and observed inference evidence |
 | Reproducible source/application/report/video | NOT VERIFIED | Reproducible setup, actual application, report, demo and repository delivery |
 
 HailoRT is not applicable to the proposed Jetson route without Hailo hardware.

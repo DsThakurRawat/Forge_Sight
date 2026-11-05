@@ -8,6 +8,12 @@ Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
 is BLOCKED - NOT VERIFIED: device unavailable; native runner/generation are not
 verified. No actual model text generation has been performed.
 
+The organizer reply shared by the user confirms Jetson Orin platform-family
+eligibility for PS5, conditional on mandatory Llama, on-device ExecuTorch, and
+local defect/quality-control operation without cloud dependency. See
+`docs/ORGANIZER_CLARIFICATION.md`. Actual hardware and execution gates remain
+open; the next task is unchanged.
+
 ## Evidence already observed
 
 - Substep 0.1 audited all four original workspace files without changing them.
