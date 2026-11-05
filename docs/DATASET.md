@@ -233,11 +233,37 @@ split-integrity tests and the existing archive tests passed (22 tests total).
 
 ## Known gaps and next task
 
-Real images/masks are audited and the split manifest is frozen. No inspection
-loader, previews, predictions, or model metrics are implemented.
+Real images/masks are audited, the split manifest is frozen, and the
+manifest-based loader is verified. No previews, predictions, or model metrics
+are implemented.
 Defect subtype classification remains unmet: test folder labels are ground truth
 for evaluation, not a prediction mechanism or a supervised training set.
 Physical camera generalization and every Jetson requirement remain unverified.
 
-Next: Stage 1.4, implement a manifest-based image/mask loader with integrity
-checks, explicit normal masks, and an explicit gate on final-holdout access.
+Next: Stage 1.5, generate labeled image/mask/overlay previews from the four
+development examples and a fitting normal image; never preview the holdout.
+
+## Verified image/mask loader: Stage 1.4
+
+`forgesight/data_loader.py` exposes one manifest role through `MetalNutDataset`.
+`InspectionInput` keeps `ground_truth_type` separate from any future prediction.
+Every loaded file is checked against its byte hash, decoded-pixel hash, size,
+and mode. It preserves source resolution and orientation; it does no training
+transforms or resizing. Missing/changed anomalous masks fail explicitly.
+
+Normal samples receive an all-zero `L` mask with `mask_origin=implicit_normal`.
+Anomalous samples retain the dataset annotation with
+`mask_origin=dataset_annotation`. Ground truth is not an inference result.
+
+Real verification loaded all 176 fit and 44 normal-validation samples with zero
+nonempty masks, and all four development samples with one nonempty mask per
+defect type. The final-holdout role was refused without explicit evaluation
+opt-in, before loading pixels. This gate prevents accidental development
+access; it is not an access-control system against deliberate code changes.
+Nine new loader tests passed, bringing the suite to 31 tests.
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role fit
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role validation_normal
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role development_preview
+```

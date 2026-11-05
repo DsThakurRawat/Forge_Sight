@@ -154,3 +154,22 @@ rejection, and path boundaries; all 22 current tests passed.
 
 Concept checks: Why must two runs produce identical role assignments? Why do
 zero exact duplicates still leave physical-part independence unverified?
+
+## Stage 1.4: Load verified inputs without inventing predictions
+
+`MetalNutDataset` exposes one role from the frozen manifest. On every load,
+the file and decoded-pixel hashes must match. An `InspectionInput` carries the
+source image, mask, role, and explicitly named ground-truth type. Nothing in
+this loader predicts anomalies or severity.
+
+For a normal sample, the zero mask is an explicit representation of the normal
+annotation. A missing anomalous mask is instead an error. Real loading passed
+for all 176 fitting, 44 validation, and four development samples. The loader
+preserves 700x700 source geometry, while final-holdout pixels require opt-in.
+Nine new synthetic tests cover changed data/masks, missing annotations,
+checksum tampering, role gates, indexing, and normal/anomaly mask behavior.
+All 31 current tests passed. Commit `7ff8846` for the prior manifest step was
+successfully pushed before beginning this loader work.
+
+Concept checks: Why name the label `ground_truth_type`? Why should a missing
+anomalous mask never become an all-zero mask silently?
