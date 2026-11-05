@@ -195,3 +195,16 @@ record that zero holdout images were displayed.
 The manifest step (`7ff8846`) and loader step (`0eada8b`) were each committed
 and pushed before proceeding. This third step completes Stage 1's technical
 proof and stops at the review gate before mandatory ExecuTorch device work.
+
+## Stage 2.1: Separate a supported route from proof on our hardware
+
+The user accepted Stage 1 and authorized three Stage 2 steps with pushes. Public
+sources identify a manually gated Llama 3.2 1B model and a pinned ExecuTorch
+1.5.1 source candidate. A source-pinned CPU/XNNPACK route is not evidence of
+Jetson GPU use, sufficient RAM, binary compatibility, or generated text.
+
+The user has no Meta Llama access, and the Jetson remains unavailable. Preflight
+recorded real WSL host facts and refused the device gate; four new parsing and
+guard tests passed. No packages were installed and no model text was simulated.
+The three-state distinction matters: source review can be verified while export
+is NOT RUN and actual device inference stays BLOCKED - NOT VERIFIED.

@@ -2,9 +2,9 @@
 
 ## Current stage
 
-Stage 1, Substep 1.5: real development previews generated and visually verified.
-Stage 1 technical acceptance evidence is complete on the PC; awaiting user
-review before Stage 2. The Jetson hardware audit remains BLOCKED - NOT VERIFIED.
+Stage 2, Substep 2.1: source/model review and read-only preflight verified.
+Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
+is BLOCKED - NOT VERIFIED: device unavailable and user has no Meta Llama access.
 
 ## Evidence already observed
 
@@ -103,22 +103,29 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Stage 1 preview commit `323f499` was pushed successfully. The user's own
+`dcba7fb` master-prompt commit is preserved. The new request authorizes the next
+three steps and a push after each. Stage 2.1 pinned a model/runtime candidate
+and tested preflight parsing/guards (four passing tests). The actual WSL run
+recorded x86_64, no ExecuTorch in the image environment, and NOT_RUN inference;
+device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
+
 | Gate | Status | Missing evidence |
 | --- | --- | --- |
 | Repeatable minimal PC image environment | DONE on tested host | Pinned install and smoke check reproduced in two isolated environments |
 | Exact Jetson hardware and camera | BLOCKED - NOT VERIFIED | Device unavailable; need device-side inventory |
 | Llama through ExecuTorch on Jetson | BLOCKED - NOT VERIFIED | Actual device-generated text, runner/version/hash, memory and timing |
+| Meta Llama checkpoint access | BLOCKED - NOT VERIFIED | User reports no access; licensed original checkpoint/tokenizer unavailable |
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
-Stage 1 input preparation is verified; its review gate is pending. No later
-stage is DONE. Desktop data preparation and GPU availability are not Jetson
+Stage 1 input preparation is verified and its review gate was accepted. Stage 2
+is not DONE. Desktop data preparation and GPU availability are not Jetson
 proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stop for Stage 1 review after completing and pushing all three authorized
-substeps (1.3, 1.4, 1.5). Next is Stage 2.1: check Llama/ExecuTorch ARM64 runtime
-prerequisites and device access. Device inventory and actual inference remain
-BLOCKED - NOT VERIFIED until the Jetson is available. Do not substitute a PC
-run or export artifact for the mandatory device proof.
+Stage 2.2: prepare source-pinned export configuration and reproducible command
+recipe, validating its keys against the chosen upstream schema. Dependencies
+and weights are blocked; no export success may be claimed. Then prepare capture
+instrumentation in 2.3 and stop for review before Stage 3.

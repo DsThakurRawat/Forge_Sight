@@ -8,6 +8,9 @@ and a Llama-family advisory model running on the device through ExecuTorch.
 a frozen split, role-based image/mask loader, and inspected development previews. There is
 no inspection application, trained model, or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
+Stage 2 preparation has started; actual Llama/ExecuTorch device inference is
+blocked by device unavailability and missing Meta Llama access. See
+[the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 
 ## Start here
 

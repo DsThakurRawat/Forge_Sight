@@ -43,3 +43,10 @@ tests; real image/mask/overlay contact sheet inspected. Preview ground truth is
 explicitly labeled, and zero final-holdout images were displayed. This completes
 data/input preparation, not model detection, type classification, severity,
 Jetson runtime, or offline compliance.
+
+## Stage 2 source/preflight evidence
+
+Model/runtime candidate pinned and sources reviewed in `docs/EDGE_RUNTIME.md`.
+User reports no Meta Llama access. Actual PC preflight identified x86_64 and
+refused a device-only operation. No weights, model export, runner build,
+generated text, device timing, or disconnected execution is verified.
