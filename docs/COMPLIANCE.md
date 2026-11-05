@@ -24,3 +24,12 @@ factory root causes, or actual offline compliance are claimed.
 Development-time access to GitHub or documentation is separate from the later
 offline runtime test. Dataset/model licensing and redistribution conditions
 must be checked before acquisition and publication of those artifacts.
+
+## Dataset review evidence
+
+Stage 1.1 documented the MVTec AD source, noncommercial license scope,
+attribution, expected image/mask layout, and evaluation partition policy in
+`docs/DATASET.md`. This review is complete; acquisition, actual file validation,
+and the split manifest are NOT VERIFIED. The project holdout will exclude four
+development images from the original test set and must be reported accordingly.
+No requirement above is satisfied by reviewing dataset documentation.

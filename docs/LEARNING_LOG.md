@@ -71,3 +71,37 @@ Concept checks:
 
 1. Why pin both a package version and a wheel hash?
 2. What does a successful PNG round trip prove, and what does it leave untested?
+
+## Stage 1.1: Understand data roles before opening images
+
+Anomaly detection asks whether appearance differs from normal. Classification
+asks which learned class applies. A folder label is ground truth for checking
+a prediction, not evidence that a model can predict that type.
+
+An image shows appearance; a mask marks anomalous pixels for localization
+evaluation. The publisher's evaluation code pairs anomalous images with masks
+using the defect folder and filename stem. Normal samples do not have mask
+files; a loader can represent their ground truth as an all-zero mask. It must
+not treat a missing anomalous mask as a normal sample.
+
+Fitting learns from the training partition. Validation supports configuration
+and threshold choices. Final evaluation checks the frozen system. Repeatedly
+adjusting settings after examining final test results leaks information from
+evaluation into development and makes performance claims optimistic.
+
+Stage 1 requires real defective previews for learning. Reserve four development
+examples deterministically before inspecting them; exclude them from the final
+holdout. This gives an expected custom 111-image holdout, not an untouched
+115-image official test set. Our 44-image normal-only validation partition can
+help calibrate false alarms but cannot establish defect recall. No files have
+actually been assigned yet; these are a recorded protocol and expected counts.
+
+The dataset has noncommercial licensing conditions and attribution obligations.
+Keeping raw data out of Git is our repository policy, not a claim that all
+redistribution is prohibited. The detailed source review is in `DATASET.md`.
+
+Concept checks:
+
+1. Why must an image used to debug an overlay be excluded from the untouched
+   final holdout?
+2. Why can't normal-only validation tell us how many defects the system misses?

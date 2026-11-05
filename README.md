@@ -25,13 +25,16 @@ figures and architectural assumptions are not verified project results.
 
 - [Hardware audit](docs/HARDWARE.md)
 - [Observed development environment](docs/ENVIRONMENT.md)
+- [Dataset source and split policy](docs/DATASET.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Requirement evidence](docs/COMPLIANCE.md)
 - [Learning notes](docs/LEARNING_LOG.md)
 
-The provisional benchmark is MVTec AD `metal_nut`. Dataset licensing, acquisition,
-splits, and loading belong to Stage 1. Controlled physical samples and actual
-Jetson camera validation are separate later evidence.
+The benchmark domain is MVTec AD `metal_nut`. Stage 1.1 records the license,
+expected layout, and project split policy; no dataset images have been downloaded
+or loaded yet. Final evaluation will use a disclosed custom holdout that excludes
+development previews. Controlled physical samples and actual Jetson camera
+validation are separate later evidence.
 
 ## Development
 

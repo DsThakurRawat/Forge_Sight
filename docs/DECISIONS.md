@@ -98,3 +98,23 @@ CPython 3.12 Linux x86_64 wheel hash. Reading and inspecting images does not yet
 require NumPy, OpenCV, matplotlib, PyTorch, or ExecuTorch. Add dependencies only
 when their roadmap tasks need them. This lock targets the tested WSL platform,
 not Jetson. A second fresh environment reproduced the setup and PNG smoke check.
+
+## 009: Separate development previews from final evaluation
+
+Stage 1.1 reviewed the publisher's dataset/license and official evaluation
+reference. `docs/DATASET.md` records the source evidence, expected layout, and
+versioned deterministic partition policy before any local images are viewed.
+
+Reserve 20% of normal training images for validation and one anomalous test
+image per defect folder for development previews. Keep the rest of the source
+test set for final evaluation. Expected roles are 176 fit, 44 normal validation,
+4 development previews, and 111 final holdout. Verify counts and duplicate
+content before accepting an actual manifest. The trade-off is a smaller custom
+holdout, requiring explicit disclosure rather than claiming the full official
+benchmark protocol. Normal-only calibration cannot optimize defect recall.
+
+Use benchmark data for the noncommercial research prototype under its stated
+CC BY-NC-SA 4.0 terms. No commercial or competition-specific licensing conclusion
+is claimed. Raw data stays outside Git. Camera samples and model artifacts need
+their own provenance review. The four test labels do not supply a trained
+subtype classifier; this requirement remains open.

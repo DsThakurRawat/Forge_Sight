@@ -2,7 +2,8 @@
 
 ## Current stage
 
-Stage 0, Substep 0.3: minimal isolated PC image environment verified. Desktop
+Stage 1, Substep 1.1: dataset source, licensing, expected layout, and project
+split policy reviewed and documented. Stage 1 remains IN PROGRESS. Desktop
 preparation is complete; the Jetson hardware audit remains BLOCKED - NOT VERIFIED.
 
 ## Evidence already observed
@@ -39,6 +40,23 @@ Git reported a clean `main` branch after the commit.
 - A second fresh temporary environment reproduced installation and both checks.
 - No model or dataset was downloaded, and no inference was performed.
 
+## Completion evidence for Substep 1.1
+
+- Reviewed the official MVTec AD page and its CC BY-NC-SA 4.0 license, including
+  the linked Creative Commons summary and legal code. No download form submitted.
+- Checked published metal-nut counts in the original authors' paper: 220 normal
+  training images, 22 normal and 93 anomalous test images. These are not yet
+  locally verified counts.
+- Inspected the publisher-linked 11,056-byte evaluation archive in memory;
+  its code confirms image/mask pairing and absence of mask files for `good`.
+  No code from the archive was executed or installed.
+- Recorded a deterministic split policy before sample viewing: expected
+  176 fit, 44 normal validation, 4 development previews, 111 final holdout.
+  This is a project protocol, not the full official test protocol.
+- See `docs/DATASET.md` for sources, limitations, and the exact proposed rule.
+  No dataset images downloaded, no split manifest generated, and no loader
+  implemented during this substep.
+
 ## Open gates
 
 | Gate | Status | Missing evidence |
@@ -49,13 +67,15 @@ Git reported a clean `main` branch after the commit.
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
-No later stage is DONE. Desktop preparation and GPU availability are not Jetson
-proof. The environment checks do not establish a defect-inspection application.
+Stage 1 is not DONE; no later stage is DONE. Desktop preparation and GPU
+availability are not Jetson proof. The environment and source-review checks
+do not establish a defect-inspection application.
 
 ## Next exact task
 
-After review, Stage 1, Substep 1.1: inspect the official MVTec AD `metal_nut`
-source, license, directory layout, and leakage-safe split policy before any
-dataset download or loader implementation. The roadmap permits independent PC
-work while the device is unavailable. Keep Jetson hardware, ExecuTorch device
-inference, and offline edge gates explicitly blocked until actual evidence exists.
+After review, Stage 1, Substep 1.2: acquire the official MVTec AD `metal_nut`
+archive through the publisher's download flow, record its actual source/hash,
+inspect archive paths/notices/counts, and verify the expected local layout in
+ignored `data/`. The split policy is recorded, not implemented. Generate and
+freeze its manifest before later sample previews. Keep Jetson hardware,
+ExecuTorch device inference, and offline edge gates explicitly blocked.
