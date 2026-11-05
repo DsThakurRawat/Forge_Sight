@@ -1,7 +1,9 @@
-# Observed environment
+# Development environment and audit
 
-This is an audit record, not a dependency lock or a fresh-install procedure.
-No packages were installed during Stage 0.1 or Substep 0.2.
+The Windows and shared WSL observations below are audit records, not a full
+project dependency lock. No packages were installed during Stage 0.1 or Substep
+0.2. Substep 0.3 installed the single pinned dependency in an isolated project
+environment and verified the setup as described below.
 
 ## Windows shell
 
@@ -74,10 +76,67 @@ not prove a model executes correctly or establishes any performance result.
 PyTorch's CUDA build version is not proof that a standalone CUDA toolkit is
 installed. WSL runs on the PC's x86_64 CPU and desktop GPU, not Jetson ARM64.
 
-## Remaining environment work
+## Project environment: Stage 0.3
 
-Substep 0.3 must select an isolated project environment and a minimal dependency
-set, verify it, and record reproducible commands. Preserve the existing WSL
-environment. Do not copy an unrelated environment's entire package inventory
-and call it the project's tested requirements. Jetson dependencies need a
-separate compatibility decision after the device audit.
+Target tested: Ubuntu WSL, Linux x86_64, CPython 3.12.14. This is a PC image-input
+environment; Jetson dependencies need a separate compatibility decision after
+the device audit.
+
+Use `.venv` for this project. The standard-library `venv` defaults to excluding
+system packages. The existing `/root/pytorch-env` supplies the Python interpreter
+for creation; its installed packages are not inherited or modified. Its complete
+87-package `pip freeze --all` inventory was compared before and after setup.
+
+Only Pillow 13.0.0 is needed to start reading and inspecting image files.
+Its CPython 3.12 Linux x86_64 wheel is pinned by SHA-256 in `requirements.txt`.
+PyPI declares Python >=3.11 and the MIT-CMU license for this release. Do not use
+this one-wheel lock as a Windows, ARM64, or other Python-version setup.
+
+Sources: [Pillow release](https://pypi.org/project/pillow/13.0.0/),
+[Python venv documentation](https://docs.python.org/3.12/library/venv.html).
+
+For a fresh environment, run the following from PowerShell. The guard protects
+an existing environment from being silently reused:
+
+```powershell
+Set-Location -LiteralPath 'C:\Users\RF AND SIMULATION\Desktop\honey\ForgeSight'
+if (Test-Path -LiteralPath .venv) { throw 'A .venv already exists; inspect it first.' }
+wsl -d Ubuntu --exec /root/pytorch-env/bin/python3 -B -m venv .venv
+if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed.' }
+wsl -d Ubuntu --exec .venv/bin/python -B -m pip --require-virtualenv install --index-url https://pypi.org/simple --require-hashes --only-binary=:all: -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+wsl -d Ubuntu --exec .venv/bin/python -B scripts/check_environment.py
+if ($LASTEXITCODE -ne 0) { throw 'Smoke check failed.' }
+wsl -d Ubuntu --exec .venv/bin/python -B -m pip check
+if ($LASTEXITCODE -ne 0) { throw 'Dependency check failed.' }
+```
+
+On another Linux development machine, use an explicitly installed CPython 3.12
+interpreter to create its own venv; the `/root/pytorch-env` path above is specific
+to this workstation. Provisioning a fresh OS/Python installation is not verified
+by this step. Always recreate environments locally rather than copying `.venv`.
+
+Observed project output:
+
+```text
+Python: 3.12.14
+Platform: linux x86_64
+Isolation: PASS (virtual environment; user site disabled)
+Pillow: 13.0.0
+PNG round trip: PASS (3x2 RGB; all pixel bytes preserved)
+Environment smoke check: PASS; no defect model or Jetson was tested.
+No broken requirements found.
+```
+
+The only installed distributions were `pillow==13.0.0` and bundled
+`pip==25.0.1`. The bootstrap pip version is recorded, not included in the image
+dependency lock. The lock does not recreate Python, OS libraries, or drivers.
+Inspection confirmed `include-system-site-packages = false` and no visibility
+of torch, torchvision, NumPy, ExecuTorch, or OpenCV from the project environment.
+The image checks use known synthetic pixels solely to exercise PNG codecs; they
+are not defect predictions or dataset evidence.
+
+A second fresh venv in a temporary Linux directory installed from the same
+requirements file and passed both the dependency and codec checks. The
+temporary directory was then removed automatically. This proves the package
+setup can be repeated on the tested host, not that it works offline or on Jetson.

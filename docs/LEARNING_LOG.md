@@ -44,3 +44,30 @@ Concept checks:
 1. Does adding `origin` or making a local commit upload anything to GitHub?
 2. If a secret was already committed, does adding it to `.gitignore` erase it
    from history?
+
+## Stage 0.3: Build a small repeatable image environment
+
+An isolated virtual environment gives this project its own packages. Creating
+it with an existing environment's Python does not copy that environment's
+installed packages by default. Calling `.venv/bin/python` explicitly avoids
+depending on shell activation or an ambiguous `python` command.
+
+`requirements.txt` pins Pillow's version and the exact Linux x86_64 CPython 3.12
+wheel hash. `pip install --require-hashes --only-binary=:all:` checks artifact
+integrity and avoids an unplanned source build. Python, OS libraries, and GPU
+drivers are separate prerequisites, not captured by this package pin.
+
+`scripts/check_environment.py` contains one `main()` function. It checks that a
+venv is active and the user package site is disabled, then encodes and decodes
+a tiny in-memory RGB image and compares every pixel byte. This tests the image
+codec and Python environment, not anomaly detection. `pip check` separately
+checks installed dependency consistency.
+
+Both checks passed in the project environment and a second fresh temporary
+environment. The project environment cannot see the shared environment's
+PyTorch, torchvision, NumPy, ExecuTorch, or OpenCV packages.
+
+Concept checks:
+
+1. Why pin both a package version and a wheel hash?
+2. What does a successful PNG round trip prove, and what does it leave untested?

@@ -85,10 +85,16 @@ meet that gate.
 
 Reference: [ExecuTorch XNNPACK documentation](https://docs.pytorch.org/executorch/stable/backends/xnnpack/xnnpack-overview.html).
 
-## 008: Inspect existing environments before selecting dependencies
+## 008: Isolate the minimal PC image environment
 
 The existing WSL environment imports CUDA-enabled PyTorch and discovers the
-desktop GPU. Record it as observed evidence and preserve it. Establish an
-isolated minimal project environment in Substep 0.3; do not install the whole
-future stack or claim that the observed package versions are a tested project
-lockfile.
+desktop GPU. Preserve it and use its CPython 3.12.14 interpreter to create a
+separate project `.venv` without system-package access. Windows-native Python
+would create a different environment; using WSL keeps the first image tools on
+Linux while remaining explicitly a PC development result.
+
+Substep 0.3 installed only Pillow 13.0.0, pinned by version and the official
+CPython 3.12 Linux x86_64 wheel hash. Reading and inspecting images does not yet
+require NumPy, OpenCV, matplotlib, PyTorch, or ExecuTorch. Add dependencies only
+when their roadmap tasks need them. This lock targets the tested WSL platform,
+not Jetson. A second fresh environment reproduced the setup and PNG smoke check.
