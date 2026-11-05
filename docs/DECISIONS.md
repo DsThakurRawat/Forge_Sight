@@ -312,3 +312,29 @@ All 70 tests pass. Jetson memory/latency, TensorRT, Llama contention and end-to-
 performance remain unverified. No pretrained model or dataset pixels were used
 in the architecture timing probes. See `docs/VISION_BASELINE.md` for sources,
 alternatives and measurements. The next task is actual first training.
+
+## 019: Train an explicit first baseline without consuming evaluation data
+
+Use the pinned EfficientAD core's three unchanged loss components in a small
+PyTorch loop, rather than a default framework data module that could expose
+the original test split. Domain optimization and teacher statistics use only
+the 176 frozen fitting normals. Metadata reserves 44 normal validation samples;
+their pixels and all development/final-holdout pixels stay unused here.
+Imagenette train images provide generic regularization with labels discarded,
+not defect supervision. Verify archive hashes before bounded extraction and
+strict, weights-only teacher loading; keep all raw assets and binaries private.
+
+Fix a 10,000-step first-baseline budget before evaluation, FP32 Adam with the
+pinned rates and 95%-budget scheduler. This is not full paper reproduction or
+proof of convergence. Compute teacher statistics with float64 accumulation
+and a declared numerical floor (no channels needed clamping). Record seeds,
+source/data hashes and any reproducibility limits rather than promise bitwise
+CUDA retraining identity. Calibration and decision threshold are deferred.
+
+The run completed in 1,158.35 seconds. It preserves 1,000/5,000/final checkpoints,
+checks finite loss/gradients, and proves frozen teacher plus changed student/AE
+weights. The final checkpoint independently reloads with exact state digests
+and the same fit-anchor output. All 78 tests pass and all four environments'
+package inventories are unchanged. No defect accuracy, type, severity, optimized
+latency or device compliance is inferred. Next is normal-validation calibration
+and threshold policy before any final-holdout evaluation.

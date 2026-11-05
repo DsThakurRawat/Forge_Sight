@@ -172,3 +172,13 @@ environment was removed automatically. Upstream timm/dinomaly deprecation
 warnings are retained; they did not prevent the selected models' execution.
 See [vision selection and reproducible commands](VISION_BASELINE.md) for
 source pins, scope, timing caveats, and pending training assets.
+
+Stage 3.2 acquired the pinned teacher and Imagenette archives on WSL's Linux
+filesystem and completed the planned 10,000-step FP32 first-baseline run using
+this same environment. No packages were installed. Full before/after package
+inventories match for the image, shared GPU, exporter and vision environments;
+the vision environment's dependency check also passes. Final checkpoint
+integrity and independent CUDA reload passed. See
+[training assets, recipe and scope](VISION_TRAINING.md). The raw assets,
+checkpoints, plot and logs remain ignored; no trained inference optimization,
+accuracy result or Jetson software setup is established by training.

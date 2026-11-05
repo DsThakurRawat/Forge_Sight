@@ -2,10 +2,12 @@
 
 ## Current stage
 
-Stage 3, Substep 3.1: EfficientAD-S at 256x256 selected for first training after
-actual desktop runtime/latency/memory probes. No vision detector has been fitted
-or trained; accuracy is NOT EVALUATED. User preference is balanced accuracy and
-inference time, with no fixed latency/production target.
+Stage 3, Substep 3.2: the first EfficientAD-S 256x256 FP32 baseline completed
+10,000 optimizer steps. Both archives and the small teacher are verified;
+teacher weights stayed unchanged and student/autoencoder weights updated.
+The final checkpoint passes an independent hash/state/output reload check.
+Accuracy is NOT EVALUATED; calibration and decision threshold are unset.
+User preference is balanced accuracy and inference time, with no fixed target.
 
 Stage 2.7 desktop Llama generation through ExecuTorch is verified. Stage 1 and
 the transition to Stage 3 were accepted by the user. Actual Stage 2 inference
@@ -115,6 +117,19 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 3.2 uses 176 verified normal fitting images and 9,469 generic Imagenette
+train images for the unchanged upstream regularization loss. No normal-validation,
+development or final-holdout pixels enter the optimizer. Both archive hashes
+match the pinned source; strict teacher loading and an actual forward passed.
+Training completed in the existing vision environment without installing packages:
+1,158.35 seconds, recent mean total loss 16.3052 near step 100 to 2.2713 at the
+end. The final 75,199,220-byte checkpoint SHA-256 is
+`85106f4a9ef6ec3e9c8acb4056dc2db2124e54284209e10d686dd36dea66ca0d`.
+Independent reload matched all network digests and the saved fit-anchor output
+exactly. All 78 tests passed; all four environment inventories are unchanged.
+This is a trained first baseline with no calibration, threshold or accuracy
+claim. See `docs/VISION_TRAINING.md` and the committed training manifest.
+
 Substep 3.1 prepared a separate GPU environment with Anomalib 2.6.2 and
 PyTorch/torchvision 2.6.0/0.21.0+cu124. Both model modules match the pinned
 Anomalib source hashes. Seventeen untrained synthetic case measurements across
@@ -203,7 +218,7 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
 | Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and program metadata; generation has separate evidence and quality remains open |
 | Desktop Llama generation via ExecuTorch | VERIFIED, PC-only smoke | Real native runner output and provenance; no device or advice-quality claim |
-| Vision model and defect-type classification | BASELINE SELECTED; accuracy/type NOT VERIFIED | First training and real same-domain evaluation; anomaly maps alone do not classify type |
+| Vision model and defect-type classification | FIRST BASELINE TRAINED; accuracy/type NOT VERIFIED | Map calibration, threshold selection and real same-domain evaluation; anomaly maps alone do not classify type |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
 Stage 1 input preparation is verified and its review gate was accepted. Stage 2
@@ -212,9 +227,9 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 3.2: review/acquire and hash-verify the selected teacher/Imagenette assets,
-connect the frozen fit/validation roles, and train EfficientAD-S with a saved
-reproducible checkpoint. Keep final holdout unavailable. FP32 is the reference;
-lower precision/resolution changes require trained-quality evidence. Threshold
-selection and final evaluation follow their own checks. Jetson proof remains
+Stage 3.3: load the verified trained checkpoint, calibrate the two map branches
+using the 44 normal validation images, and select/document a normal-only score
+threshold policy. Keep final holdout unavailable until model/policy are frozen
+for separate final evaluation. FP32 is the reference; lower precision and
+resolution changes require trained-quality evidence. Actual Jetson proof remains
 blocked until hardware is available; Stage 3 itself is not DONE.

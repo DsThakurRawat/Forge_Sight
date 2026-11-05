@@ -6,7 +6,7 @@ and a Llama-family advisory model running on the device through ExecuTorch.
 
 **Current state:** Stage 1 data/input preparation is verified on the PC, including
 a frozen split, role-based image/mask loader, and inspected development previews. There is
-no inspection application, trained inspection model, or verified Jetson runtime yet.
+no complete inspection application or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
 Stage 2.7 generated real text from the exported Llama 3.2 1B model through
 ExecuTorch's native C++ runner, called from Python on desktop WSL. The original
@@ -15,7 +15,7 @@ inference remains blocked by device unavailability. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The device capture harness still refuses this PC as a Jetson target. All 70
+The device capture harness still refuses this PC as a Jetson target. All 78
 project tests pass. Desktop text is real; advice quality, defect detection,
 Jetson performance, and disconnected operation remain unverified.
 
@@ -24,6 +24,13 @@ runtime cost, memory and potential lower precision. Actual untrained architectur
 probes compared it with medium/higher-resolution variants and compact/heavier
 PatchCore candidates. These are not accuracy or Jetson benchmarks. See
 [the trade-offs, measurements and training prerequisites](docs/VISION_BASELINE.md).
+
+Stage 3.2 completed real EfficientAD-S training: 10,000 FP32 updates on the 176
+normal fitting images, with the verified teacher and generic-image regularization.
+The final checkpoint passes independent reload/state/output checks. It remains
+uncalibrated; accuracy and a pass/reject threshold are not established. No
+validation or holdout pixels were used in training. See the
+[training evidence, learning curve, and commands](docs/VISION_TRAINING.md).
 
 ## Start here
 
@@ -86,7 +93,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 70 current data-integrity, edge, and measurement-integrity tests:
+Run the 78 current data-integrity, edge, training-boundary and measurement tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v

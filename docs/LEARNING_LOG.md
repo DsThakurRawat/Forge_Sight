@@ -357,3 +357,29 @@ modules match pinned upstream source. All 70 tests pass, including integrity of
 percentile reporting and memory-bank sizing. Teacher and Imagenette training
 assets are still pending. Next: verify those assets and train on the 176 frozen
 normal fit images, preserving 44 normal validation images and the final holdout.
+
+## Stage 3.2: The first model has actually learned from normal parts
+
+The pretrained teacher produces visual features; its weights stay frozen. The
+student and autoencoder learn from our normal fitting images. The unchanged
+upstream losses also use generic Imagenette images to discourage imitation
+outside the normal domain. Those generic labels do not teach metal-nut types.
+
+Both downloaded archives matched publisher hashes and were safely extracted.
+Only 176 fitting normals entered domain training and teacher statistics. The
+44 normal validation images were reserved without reading their pixels; no
+development or final-holdout images were read. We ran the predeclared 10,000
+FP32 optimizer steps, a first baseline rather than a full paper reproduction.
+
+Training finished in about 19 minutes. Recent mean total loss fell from 16.31
+near step 100 to 2.27 over the final 100 steps. Teacher weights remained identical;
+student and autoencoder weights changed. The actual learning curve is saved,
+and the final checkpoint reloads independently with exactly the same saved
+fit-image output. All 78 tests pass and existing environment inventories match.
+
+This establishes training and checkpoint integrity, not accuracy: a model can
+fit its normals and still miss unseen defects. The checkpoint is uncalibrated,
+with no pass/reject threshold. Next, use the 44 reserved normals to calibrate
+the map branches and document a threshold policy. Final held-out accuracy,
+defect type/severity, trained low-latency deployment and all Jetson/offline
+requirements remain separate evidence.

@@ -35,8 +35,8 @@
   "validation_role": "validation_normal",
   "validation_normal_images": 44,
   "final_holdout_access": "NOT_AUTHORIZED_BY_THIS_STEP",
-  "teacher_assets_status": "NOT_DOWNLOADED_NOT_VERIFIED",
-  "regularization_assets_status": "NOT_DOWNLOADED_NOT_VERIFIED",
+  "teacher_assets_status": "ARCHIVE_AND_SMALL_TEACHER_VERIFIED",
+  "regularization_assets_status": "ARCHIVE_VERIFIED_TRAIN_SPLIT_AVAILABLE",
   "pretrained_teacher_archive": {
     "url": "https://github.com/open-edge-platform/anomalib/releases/download/efficientad_pretrained_weights/efficientad_pretrained_weights.zip",
     "expected_sha256_from_upstream": "c09aeaa2b33f244b3261a5efdaeae8f8284a949470a4c5a526c61275fe62684a"
@@ -54,5 +54,6 @@
   "severity": "NOT_IMPLEMENTED",
   "accuracy": "NOT_EVALUATED",
   "jetson_latency": "NOT_VERIFIED",
-  "llama_runtime_requirement": "On-device Llama via ExecuTorch remains mandatory; separate asynchronous worker, actual device gate still blocked."
+  "llama_runtime_requirement": "On-device Llama via ExecuTorch remains mandatory; separate asynchronous worker, actual device gate still blocked.",
+  "asset_reference": "manifests/vision_training_assets.json"
 }

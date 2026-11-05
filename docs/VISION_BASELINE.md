@@ -6,6 +6,11 @@ fixed per-image latency or production-rate target. Select **EfficientAD-S,
 not a trained detector, proven accuracy winner, or final Jetson configuration.
 Keep **PatchCore with ResNet-18** as the fallback/comparison candidate.
 
+This page records the Stage 3.1 selection and untrained architecture probes.
+The subsequent [Stage 3.2 asset verification and training record](VISION_TRAINING.md)
+tracks progress toward an actual trained checkpoint; it does not turn these
+earlier synthetic timings into trained accuracy or Jetson evidence.
+
 Stage 2.7 has real desktop Llama generation through ExecuTorch. Actual Jetson
 execution remains blocked; the roadmap permits independent PC vision work.
 On-device Llama through ExecuTorch remains mandatory and will run separately

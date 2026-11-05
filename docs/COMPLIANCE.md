@@ -14,6 +14,14 @@ fitted/trained. No dataset or holdout pixels were read by the probes. No anomaly
 score/map from this step is evidence of a working detector, defect type,
 severity, or verified edge performance. See `docs/VISION_BASELINE.md`.
 
+Stage 3.2 supersedes the no-training snapshot: the first EfficientAD-S baseline
+completed 10,000 real FP32 optimizer steps and its final checkpoint reloads with
+matching state/output. The teacher stayed frozen and both trainable networks
+changed. Validation/development/holdout pixels remained unused; calibration,
+threshold, accuracy, defect type and severity are still unverified. Training
+loss reduction is not acceptance evidence for those requirements. See
+`manifests/efficientad_s_training_v1.json` and `docs/VISION_TRAINING.md`.
+
 The [organizer clarification shared by the user](ORGANIZER_CLARIFICATION.md)
 accepts the Jetson Orin platform family for PS5, subject to the mandatory
 technologies. It clears the platform-eligibility question; actual device
