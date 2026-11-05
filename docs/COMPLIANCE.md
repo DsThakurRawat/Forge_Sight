@@ -29,7 +29,9 @@ must be checked before acquisition and publication of those artifacts.
 
 Stage 1.1 documented the MVTec AD source, noncommercial license scope,
 attribution, expected image/mask layout, and evaluation partition policy in
-`docs/DATASET.md`. This review is complete; acquisition, actual file validation,
-and the split manifest are NOT VERIFIED. The project holdout will exclude four
+`docs/DATASET.md`. Review, acquisition, actual image/mask validation, and hashed
+extraction are verified. The split manifest is NOT VERIFIED. The project holdout will exclude four
 development images from the original test set and must be reported accordingly.
-No requirement above is satisfied by reviewing dataset documentation.
+The exact archive URL was not captured; the user confirmed the publisher's
+download flow and the archive fingerprint is recorded. No requirement above
+is satisfied merely by acquiring or validating benchmark files.

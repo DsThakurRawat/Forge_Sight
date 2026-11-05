@@ -2,8 +2,8 @@
 
 ## Current stage
 
-Stage 1, Substep 1.1: dataset source, licensing, expected layout, and project
-split policy reviewed and documented. Stage 1 remains IN PROGRESS. Desktop
+Stage 1, Substep 1.2: real category archive acquired and all images/masks
+structurally validated and extracted. Stage 1 remains IN PROGRESS. Desktop
 preparation is complete; the Jetson hardware audit remains BLOCKED - NOT VERIFIED.
 
 ## Evidence already observed
@@ -57,6 +57,24 @@ Git reported a clean `main` branch after the commit.
   No dataset images downloaded, no split manifest generated, and no loader
   implemented during this substep.
 
+## Completion evidence for Substep 1.2
+
+- The user supplied a Downloads path and explicitly confirmed official MVTec
+  acquisition. The original `metal_nut.zip` was copied without changing it.
+  Exact archive URL was unavailable; this source limitation is recorded.
+- Archive: 165,672,999 bytes, SHA-256
+  `5468b22edb8e3ebcb2e415bcc6adbed571e1b8a4dec03d1747e52d696384d838`.
+- Actual counts: 220 normal training images; 22 normal and 93 anomalous test
+  images; 93 matching masks. Defect counts: bent 25, color 22, flip 23, scratch 23.
+- Every PNG fully decoded: 700x700 RGB images, grayscale `L` masks, values 0/255.
+  Every anomalous image has a nonempty paired mask; no orphan masks.
+- Safely extracted to ignored `data/mvtec_ad/metal_nut/`; all 430 regular files
+  matched audited hashes, including the two retained attribution/license notices.
+- Fourteen synthetic ZIP/tar validation/extraction tests passed. This is separate
+  from the real data audit; neither is model-performance evidence.
+- Source, archive, extracted data, and generated audit reports stay outside Git.
+  No split manifest generated, no sample previews displayed, and no model run.
+
 ## Open gates
 
 | Gate | Status | Missing evidence |
@@ -73,9 +91,7 @@ do not establish a defect-inspection application.
 
 ## Next exact task
 
-After review, Stage 1, Substep 1.2: acquire the official MVTec AD `metal_nut`
-archive through the publisher's download flow, record its actual source/hash,
-inspect archive paths/notices/counts, and verify the expected local layout in
-ignored `data/`. The split policy is recorded, not implemented. Generate and
-freeze its manifest before later sample previews. Keep Jetson hardware,
-ExecuTorch device inference, and offline edge gates explicitly blocked.
+After review, Stage 1, Substep 1.3: check duplicate image content and generate
+the frozen split manifest using the recorded version/seed/path-ranking policy.
+Verify role counts and disjointness before any sample previews. Keep Jetson
+hardware, ExecuTorch device inference, and offline edge gates explicitly blocked.

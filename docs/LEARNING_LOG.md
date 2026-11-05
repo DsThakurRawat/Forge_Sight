@@ -105,3 +105,35 @@ Concept checks:
 1. Why must an image used to debug an overlay be excluded from the untouched
    final holdout?
 2. Why can't normal-only validation tell us how many defects the system misses?
+
+## Stage 1.2: Verify the actual archive before using it
+
+The real archive contains 335 inspection images and 93 masks. Images are RGB;
+masks are grayscale, with 0 for normal pixels and 255 for anomalous pixels.
+Mask brightness is a binary annotation, not a probability or severity score.
+
+SHA-256 fingerprints the archive bytes. Matching hashes prove our copy matches
+the supplied file; they do not independently authenticate publisher origin.
+Here the user confirmed downloading through MVTec, while the exact archive URL
+and publisher checksum were unavailable. Keep those evidence types separate.
+
+`scripts/audit_metal_nut_archive.py` checks archive entries and fully decodes
+the PNGs without displaying them. `canonical_path()` prevents path traversal;
+`audit_archive()` checks structure/counts/pairing and records file/pixel hashes;
+`extract_audited_archive()` writes into a new directory and verifies each file.
+Normal images have no mask files; anomalous images must have nonempty masks.
+
+Fourteen temporary synthetic tests in `tests/test_archive_audit.py` exercised
+valid and malformed archives. The actual dataset was then independently audited
+and extracted: 430 regular files, including the original license and readme,
+matched their hashes. The test fixtures are not claimed as inspection samples.
+
+No split or preview exists yet. First create a frozen manifest and check
+duplicate content, then use only the designated development examples to learn
+image/mask visualization. Structural validation does not demonstrate detection
+accuracy or camera generalization.
+
+Concept checks:
+
+1. What does matching the original archive's SHA-256 prove about our copy?
+2. Why is a missing anomalous mask an error, while normal samples have no mask?

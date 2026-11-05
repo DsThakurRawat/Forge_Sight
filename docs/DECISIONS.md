@@ -118,3 +118,23 @@ CC BY-NC-SA 4.0 terms. No commercial or competition-specific licensing conclusio
 is claimed. Raw data stays outside Git. Camera samples and model artifacts need
 their own provenance review. The four test labels do not supply a trained
 subtype classifier; this requirement remains open.
+
+## 010: Audit the original category ZIP and preserve local copies
+
+The user acquired `metal_nut.zip` through the official MVTec flow and supplied
+its local location. Copy the original archive into ignored `data/downloads/`,
+verify source/copy hashes, audit all entries/PNGs/masks, then extract only audited
+regular files into a new ignored category directory. Preserve the original ZIP
+and the user's already extracted Downloads folder. Record the exact archive
+fingerprint and observed counts in `docs/DATASET.md`.
+
+Support ZIP and tar because the actual supplied category archive is ZIP. Use
+only Python's standard archive libraries and the already installed Pillow.
+Reject unsafe paths, links, corrupt files, and mask-pairing errors; refuse
+existing extraction destinations and report files. Check extracted-file hashes
+instead of assuming an extraction command succeeded. Fourteen synthetic tests
+exercise this behavior; the real archive independently passed all checks.
+
+No publisher-provided checksum or exact download URL was supplied. User-confirmed
+publisher origin and our measured fingerprint are recorded as different evidence.
+No image visualization, partition assignment, or inference belongs in this step.

@@ -30,11 +30,18 @@ figures and architectural assumptions are not verified project results.
 - [Requirement evidence](docs/COMPLIANCE.md)
 - [Learning notes](docs/LEARNING_LOG.md)
 
-The benchmark domain is MVTec AD `metal_nut`. Stage 1.1 records the license,
-expected layout, and project split policy; no dataset images have been downloaded
-or loaded yet. Final evaluation will use a disclosed custom holdout that excludes
+The benchmark domain is MVTec AD `metal_nut`. Its real archive and extracted
+335 images/93 masks have passed structural validation; the license, source
+fingerprint, counts, and split policy are in `docs/DATASET.md`. No split manifest,
+preview, or model prediction exists yet. Final evaluation will use a disclosed custom holdout that excludes
 development previews. Controlled physical samples and actual Jetson camera
 validation are separate later evidence.
+
+Repeat the category archive audit without extracting or displaying images:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B scripts/audit_metal_nut_archive.py data/downloads/metal_nut.zip
+```
 
 ## Development
 

@@ -1,8 +1,9 @@
 # MVTec AD metal_nut: source and evaluation policy
 
-Stage 1, Substep 1.1. Reviewed 2026-11-05 (Asia/Calcutta).
-This is a source review and a proposed local data contract. No dataset images
-have been acquired, counted, decoded, or split yet.
+Stage 1, Substeps 1.1-1.2. Reviewed and locally audited 2026-11-05
+(Asia/Calcutta). The category archive and extracted files have been verified.
+The split policy below is recorded but not implemented; no previews or inference
+have been run.
 
 ## Source and permitted scope
 
@@ -11,8 +12,10 @@ Use the original 2D MVTec AD `metal_nut` category. The
 describes normal-only training, mixed normal/anomalous testing, pixel-level
 annotations, and CC BY-NC-SA 4.0 licensing. The legacy `/company/research/`
 address redirected to this page with HTTP 200 during this review. The current
-page presents a download form; no form was submitted and no unofficial mirror
-or guessed archive address has been selected. MVTec AD 2 is a different dataset.
+page presents a download form. The user supplied `metal_nut.zip` and explicitly
+confirmed downloading through the official MVTec page. The assistant submitted
+no personal details or forms. No unofficial mirror or guessed archive address
+was selected. MVTec AD 2 is a different dataset.
 
 Use this benchmark for the noncommercial learning/research prototype.
 Commercial use is excluded by the stated license. When sharing dataset images
@@ -37,14 +40,14 @@ Dataset for Unsupervised Anomaly Detection*, CVPR 2019, pp. 9592-9600.
 The original authors' [paper, Table 1](https://openaccess.thecvf.com/content_CVPR_2019/papers/Bergmann_MVTec_AD_--_A_Comprehensive_Real-World_Dataset_for_Unsupervised_Anomaly_CVPR_2019_paper.pdf)
 reports 220 normal training images, 22 normal test images, 93 anomalous test
 images, four defect groups, and a 700-pixel image side length for metal nuts.
-These are published expectations, not local counts. The four labels expected
+These published totals now agree with the local audit below. The four labels
 by our contract are `bent`, `color`, `flip`, and `scratch`; their names also appear
 in a [published evaluation's supplementary table](https://openaccess.thecvf.com/content/ICCV2023W/LXCV/supplemental/Gula_Gaussian_Image_Anomaly_ICCVW_2023_supplemental.pdf).
-Actual directories, per-type counts, image modes, and mask values remain
-NOT VERIFIED until acquisition. The `flip` label concerns an orientation
+Actual directories, per-type counts, image modes, and mask values were verified
+in Substep 1.2. The `flip` label concerns an orientation
 anomaly; a dataset label does not establish physical damage or severity.
 
-Expected local layout, to verify after download:
+Verified local layout:
 
 ```text
 data/mvtec_ad/metal_nut/
@@ -67,6 +70,90 @@ Reference archive: 11,056 bytes; SHA-256
 It is reference material only; its historical Python/dependency recipe was
 not adopted. No external evaluation files were copied into this repository.
 
+## Local acquisition and actual validation: Stage 1.2
+
+The user supplied the extracted folder under Downloads. Inspection of matching
+`metal_nut*` entries also found the original `metal_nut.zip`; the original ZIP
+was used for acquisition, leaving both Downloads copies untouched.
+
+| Provenance item | Actual record |
+| --- | --- |
+| User-provided archive | `C:\Users\RF AND SIMULATION\Downloads\metal_nut.zip` |
+| Project archive copy | `data/downloads/metal_nut.zip` |
+| Archive format/size | ZIP; 165,672,999 bytes |
+| Extracted category | `data/mvtec_ad/metal_nut/` |
+| Publisher source | Official MVTec page above, confirmed by the user |
+| Exact archive URL | Not captured; Windows download-origin metadata was absent |
+
+Archive SHA-256:
+`5468b22edb8e3ebcb2e415bcc6adbed571e1b8a4dec03d1747e52d696384d838`.
+This is a locally calculated fingerprint, not a comparison with a publisher-
+supplied signed checksum. The Downloads archive, project archive copy, and
+audit report agree on this hash.
+
+Actual image/mask counts:
+
+| Source directory | Images | Matching masks |
+| --- | --- | --- |
+| `train/good` | 220 | Not provided for normal images |
+| `test/good` | 22 | Not provided for normal images |
+| `test/bent` | 25 | 25 |
+| `test/color` | 22 | 22 |
+| `test/flip` | 23 | 23 |
+| `test/scratch` | 23 | 23 |
+| Total | 335 | 93 |
+
+Every image and mask was fully decoded for structural validation. All are
+700x700 PNGs: images use RGB, masks use grayscale `L` with binary values 0 and
+255. Every anomalous image has a matching nonempty mask, with no orphan masks.
+No image was displayed, no split assigned, and no prediction computed.
+
+The ZIP contains 444 entries, including directories. Its 430 regular files
+consist of 335 images, 93 masks, `readme.txt`, and `license.txt`. The notices
+confirm dataset attribution and CC BY-NC-SA 4.0 licensing. All 430 extracted
+files matched their audited per-file hashes and the final inventory matched
+the audit. These checks do not establish distinct physical part IDs or remove
+the need for duplicate analysis before partitioning.
+
+Ignored local evidence:
+
+- `data/metadata/metal_nut_download_origin.json`: source confirmation and archive
+  fingerprint; no invented direct download URL.
+- `artifacts/data/metal_nut_archive_audit.json`: archive-only audit.
+- `artifacts/data/metal_nut_preparation.json`: archive and extraction proof,
+  including per-file hashes, decoded-pixel hashes, sizes, modes, and pairing.
+
+Repeat the read-only audit from PowerShell in the project directory:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B scripts/audit_metal_nut_archive.py data/downloads/metal_nut.zip
+```
+
+For a fresh setup only, after obtaining the archive and when both the destination
+directory and report path are absent:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B scripts/audit_metal_nut_archive.py data/downloads/metal_nut.zip --extract-to data/mvtec_ad/metal_nut --report artifacts/data/metal_nut_preparation.json
+```
+
+The script accepts category ZIP/tar archives, checks paths and entry types,
+decodes PNGs, checks counts/mask pairing, and optionally copies only audited
+regular files. It refuses existing extraction destinations and report files.
+Extraction verifies the archive fingerprint again and compares every extracted
+file hash; failure leaves partial files for inspection rather than replacing or
+cleaning up local work. No extraction occurs during a default audit.
+
+Verification command:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
+```
+
+Fourteen synthetic tests passed, including valid ZIP/tar layouts, unsafe paths,
+links, duplicate destinations, corrupt PNGs, missing/empty/nonbinary masks,
+changed archives, and refusal to overwrite an extracted dataset. Synthetic
+fixtures test validator behavior; the actual ZIP audit above is separate evidence.
+
 ## Project split policy v1: choose before viewing samples
 
 Anomaly detection learns normal appearance; it does not learn four defect
@@ -80,9 +167,9 @@ unchanged and assign roles in a separate manifest before generating previews.
 | One image per anomalous test folder | development_preview | 4 | Learn the data and debug image/mask display |
 | All remaining original test images | final_holdout | 111: 22 normal, 89 anomalous | One final evaluation after configuration is frozen |
 
-Counts assume the published inventory and no cross-role duplicate content;
-they must be verified before any split is marked created. No split manifest
-exists yet.
+Counts agree with the acquired inventory but still assume no cross-role
+duplicate content. Duplicate analysis and role assignment must be verified
+before a split is marked created. No split manifest exists yet.
 
 Deterministic selection rule for the later manifest implementation:
 
@@ -121,12 +208,12 @@ validation requires distinct controlled samples and part-level splitting.
 
 ## Known gaps and next task
 
-No data loader, masks, split manifest, predictions, or metrics are implemented.
+Real images and masks are acquired and audited. No inspection loader, split
+manifest, previews, predictions, or model metrics are implemented.
 Defect subtype classification remains unmet: test folder labels are ground truth
 for evaluation, not a prediction mechanism or a supervised training set.
 Physical camera generalization and every Jetson requirement remain unverified.
 
-Next: Stage 1.2, acquire the official category archive through the publisher's
-download flow; record the actual source/archive hash; inspect archive paths,
-notices, and counts; and verify the local layout under ignored `data/`.
-Create the manifest before viewing real examples in a later loader/preview step.
+Next: Stage 1.3, check duplicate image content and implement the recorded
+deterministic split policy as a frozen, auditable manifest. Do that before
+viewing real examples in the later loader/preview step.
