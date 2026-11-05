@@ -138,3 +138,27 @@ exercise this behavior; the real archive independently passed all checks.
 No publisher-provided checksum or exact download URL was supplied. User-confirmed
 publisher origin and our measured fingerprint are recorded as different evidence.
 No image visualization, partition assignment, or inference belongs in this step.
+
+## 011: Freeze metadata, verify role-based inputs, and label preview evidence
+
+Substeps 1.3-1.5 implement the previously recorded partition policy without
+changing seed, counts, or preview selection. Commit portable metadata and its
+checksum; keep source images and generated contact sheets outside Git. Byte and
+decoded-pixel duplicate checks passed; near-duplicates and physical identity
+are still not established.
+
+Use Pillow and the standard library for loading and display. Preserve source
+resolution, verify file/pixel fingerprints on load, and gate final-holdout
+access with explicit evaluation opt-in. A normal sample gets an explicit zero
+mask; a missing anomalous mask fails. Avoid adding model dependencies until
+their roadmap stage requires them.
+
+Render only one fitting normal sample plus the four frozen development
+examples. Mark labels and overlays as ground truth and retain attribution.
+Nearest-neighbor resizing preserves binary mask display; source inputs are
+unchanged. Annotation area in pixels is not a physical severity measurement.
+
+The user explicitly authorized these three steps and a push after each verified
+commit. The first two pushes succeeded before starting the following step;
+the third step's final report records its actual push result. Preserve the
+concurrent local master-prompt edit outside the implementation commits.

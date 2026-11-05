@@ -1,9 +1,10 @@
 # MVTec AD metal_nut: source and evaluation policy
 
-Stage 1, Substeps 1.1-1.2. Reviewed and locally audited 2026-11-05
+Stage 1, Substeps 1.1-1.5. Reviewed and locally audited 2026-11-05
 (Asia/Calcutta). The category archive and extracted files have been verified.
 The split policy below is implemented in a frozen manifest (Substep 1.3).
-No previews or inference have been run.
+Development-only ground-truth previews are verified. No model inference has
+been run.
 
 ## Source and permitted scope
 
@@ -41,7 +42,7 @@ The original authors' [paper, Table 1](https://openaccess.thecvf.com/content_CVP
 reports 220 normal training images, 22 normal test images, 93 anomalous test
 images, four defect groups, and a 700-pixel image side length for metal nuts.
 These published totals now agree with the local audit below. The four labels
-by our contract are `bent`, `color`, `flip`, and `scratch`; their names also appear
+in our contract are `bent`, `color`, `flip`, and `scratch`; their names also appear
 in a [published evaluation's supplementary table](https://openaccess.thecvf.com/content/ICCV2023W/LXCV/supplemental/Gula_Gaussian_Image_Anomaly_ICCVW_2023_supplemental.pdf).
 Actual directories, per-type counts, image modes, and mask values were verified
 in Substep 1.2. The `flip` label concerns an orientation
@@ -231,18 +232,6 @@ the check above verifies the committed manifest. The creation command without
 `--check` is only for a new manifest path; it refuses existing files. Eight new
 split-integrity tests and the existing archive tests passed (22 tests total).
 
-## Known gaps and next task
-
-Real images/masks are audited, the split manifest is frozen, and the
-manifest-based loader is verified. No previews, predictions, or model metrics
-are implemented.
-Defect subtype classification remains unmet: test folder labels are ground truth
-for evaluation, not a prediction mechanism or a supervised training set.
-Physical camera generalization and every Jetson requirement remain unverified.
-
-Next: Stage 1.5, generate labeled image/mask/overlay previews from the four
-development examples and a fitting normal image; never preview the holdout.
-
 ## Verified image/mask loader: Stage 1.4
 
 `forgesight/data_loader.py` exposes one manifest role through `MetalNutDataset`.
@@ -267,3 +256,53 @@ wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role fit
 wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role validation_normal
 wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role development_preview
 ```
+
+## Verified development previews: Stage 1.5
+
+`forgesight/data_preview.py` uses the loader to render the first fitting normal
+image and the four frozen development samples. It has no holdout-selection
+argument and opens only fitting/development image files. Five new tests check
+overlay alignment/binary masks, unchanged background pixels, rendering with all
+unselected files absent, and refusal to replace an existing output directory.
+All 36 current tests passed.
+
+Real outputs were generated and visually inspected at
+`artifacts/data/development_preview_v1/contact_sheet.png` and `preview.json`.
+The sheet labels every panel as source, annotation mask, or red annotation
+overlay; the title states that these are ground truth, not model predictions.
+Source/license attribution and display modifications are included. Original
+700x700 inputs remain unchanged; 300x300 tiles are only a display choice.
+
+| Displayed source | Role | Annotation area in source pixels |
+| --- | --- | --- |
+| `train/good/000.png` | fit | 0 |
+| `test/bent/017.png` | development_preview | 9,041 |
+| `test/color/009.png` | development_preview | 8,684 |
+| `test/flip/012.png` | development_preview | 234,723 |
+| `test/scratch/020.png` | development_preview | 16,654 |
+
+These areas describe supplied masks, not measured physical defects, severity,
+or model detections. The flip example illustrates why large annotation area
+alone does not establish surface-damage severity. Zero final-holdout images
+were displayed. Previews and their metadata remain ignored local artifacts.
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_preview
+```
+
+This command creates a new output directory and refuses to overwrite an existing
+one. To regenerate into another new local directory, use
+`--output artifacts/data/development_preview_review`.
+
+## Stage 1 gate and next task
+
+Stage 1 technical proof is observed on the PC: real inputs/masks load, actual
+labels/counts are reported, source/license and partitions are documented,
+development overlays are saved and inspected, and raw dataset pixels are not
+tracked. Await user review before advancing to Stage 2.
+
+No anomaly detector, subtype classifier, severity policy, predictions, or model
+metrics exist. Physical camera generalization and every Jetson requirement
+remain unverified. Stage 2.1 next reviews the Llama/ExecuTorch ARM64 runtime
+prerequisites and device access; actual on-device proof remains blocked until
+the Jetson is available. A PC run or exported file cannot satisfy that gate.

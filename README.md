@@ -4,8 +4,8 @@ An incremental project for offline industrial surface-defect inspection on an
 NVIDIA Jetson Orin Nano, with deterministic grading, local inspection history,
 and a Llama-family advisory model running on the device through ExecuTorch.
 
-**Current state:** the workspace is protected in local Git, and a minimal
-isolated PC image environment has passed codec and dependency checks. There is
+**Current state:** Stage 1 data/input preparation is verified on the PC, including
+a frozen split, role-based image/mask loader, and inspected development previews. There is
 no inspection application, trained model, or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
 
@@ -34,8 +34,9 @@ The benchmark domain is MVTec AD `metal_nut`. Its real archive and extracted
 335 images/93 masks have passed structural validation; the license, source
 fingerprint, counts, and split policy are in `docs/DATASET.md`. A frozen manifest
 assigns 176 fit, 44 normal-validation, four development, and 111 holdout samples.
-A verified loader reads fitting, validation, and development roles. No visual
-preview or model prediction exists yet. Final evaluation uses a disclosed custom holdout that excludes
+A verified loader reads fitting, validation, and development roles. A local
+contact sheet shows supplied ground-truth annotations; no model predictions
+exist yet. Final evaluation uses a disclosed custom holdout that excludes
 development previews. Controlled physical samples and actual Jetson camera
 validation are separate later evidence.
 
@@ -55,6 +56,24 @@ Load and verify the four development image/mask pairs:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_loader --role development_preview
+```
+
+Generate the development-only contact sheet (output directory must be new):
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.data_preview
+```
+
+Open `artifacts/data/development_preview_v1/contact_sheet.png`. Its five rows
+contain one normal fitting image plus bent, color, flip, and scratch development
+samples. The red overlays are dataset annotations, not detector predictions.
+The source, license, manifest fingerprint, and pixel-area metadata accompany
+the image in `preview.json`. No holdout images are displayed.
+
+Run the 36 current integrity, split, loader, and preview tests:
+
+```powershell
+wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
 ```
 
 ## Development

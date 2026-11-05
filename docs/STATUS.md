@@ -2,9 +2,9 @@
 
 ## Current stage
 
-Stage 1, Substep 1.4: manifest-based image/mask loader verified.
-Stage 1 remains IN PROGRESS. Desktop
-preparation is complete; the Jetson hardware audit remains BLOCKED - NOT VERIFIED.
+Stage 1, Substep 1.5: real development previews generated and visually verified.
+Stage 1 technical acceptance evidence is complete on the PC; awaiting user
+review before Stage 2. The Jetson hardware audit remains BLOCKED - NOT VERIFIED.
 
 ## Evidence already observed
 
@@ -75,7 +75,7 @@ Git reported a clean `main` branch after the commit.
 - Source, archive, extracted data, and generated audit reports stay outside Git.
   No split manifest generated, no sample previews displayed, and no model run.
 
-## Open gates
+## Completion evidence for Substeps 1.3-1.5
 
 Substep 1.3 verified all current files against acquisition fingerprints and
 found zero byte/pixel duplicate image groups. The frozen manifest assigns
@@ -87,10 +87,21 @@ All 22 current tests passed. No previews or inference were performed.
 The user authorized the next three Stage 1 substeps and `git push origin main`
 after each verified commit. Actual push results are reported at each checkpoint.
 
-Substep 1.3 was committed and pushed as `7ff8846`. Substep 1.4 verified loading
+Substep 1.3 was committed and pushed as `7ff8846`. Substep 1.4 was committed and
+pushed as `0eada8b`; it verified loading
 all 176 fit, 44 normal-validation, and four development samples with byte/pixel
 hashes, modes, sizes, and mask semantics checked. Default final-holdout access
 was refused. All 31 current tests passed. No visual previews or predictions yet.
+
+Substep 1.5 generated and visually verified the contact sheet and provenance
+JSON in `artifacts/data/development_preview_v1/`. Only `train/good/000.png` and
+four frozen development examples were displayed. Annotation areas are recorded
+in `docs/DATASET.md`; no predictions, severity, or physical dimensions are
+claimed. Five new preview tests passed, bringing the total to 36 tests.
+The commit containing this evidence records the third authorized substep;
+its actual commit hash and push result are supplied in the final step report.
+
+## Open gates
 
 | Gate | Status | Missing evidence |
 | --- | --- | --- |
@@ -100,12 +111,14 @@ was refused. All 31 current tests passed. No visual previews or predictions yet.
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
-Stage 1 is not DONE; no later stage is DONE. Desktop preparation and GPU
-availability are not Jetson proof. The environment and source-review checks
-do not establish a defect-inspection application.
+Stage 1 input preparation is verified; its review gate is pending. No later
+stage is DONE. Desktop data preparation and GPU availability are not Jetson
+proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 1, Substep 1.5: generate development-only sample previews using the verified
-loader. This is the third of the three currently authorized substeps. Stop at the Stage 1
-gate before advancing to Stage 2; all Jetson gates remain explicitly blocked.
+Stop for Stage 1 review after completing and pushing all three authorized
+substeps (1.3, 1.4, 1.5). Next is Stage 2.1: check Llama/ExecuTorch ARM64 runtime
+prerequisites and device access. Device inventory and actual inference remain
+BLOCKED - NOT VERIFIED until the Jetson is available. Do not substitute a PC
+run or export artifact for the mandatory device proof.

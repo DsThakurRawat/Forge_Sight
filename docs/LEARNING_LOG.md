@@ -173,3 +173,25 @@ successfully pushed before beginning this loader work.
 
 Concept checks: Why name the label `ground_truth_type`? Why should a missing
 anomalous mask never become an all-zero mask silently?
+
+## Stage 1.5: Inspect real annotations without consuming the holdout
+
+The contact sheet shows a normal fitting image and four reserved development
+examples, each beside its mask and red overlay. It was visually inspected:
+normal pixels are unchanged by the overlay, and the annotated regions align
+with the source images. The title explicitly identifies ground truth rather
+than model output. Five new preview tests passed; all 36 tests now pass.
+
+The normal mask is empty. The flip annotation covers most of the nut, while
+the other displayed annotations are smaller localized regions. That difference
+does not establish which defect is more severe. The recorded areas are source
+pixel counts from annotations; no calibration or quality decision is claimed.
+
+Only display tiles are resized. Binary masks use nearest-neighbor resampling,
+while originals stay at 700x700. The local output includes source/license
+attribution, exact sample paths, manifest fingerprint, mask provenance, and a
+record that zero holdout images were displayed.
+
+The manifest step (`7ff8846`) and loader step (`0eada8b`) were each committed
+and pushed before proceeding. This third step completes Stage 1's technical
+proof and stops at the review gate before mandatory ExecuTorch device work.
