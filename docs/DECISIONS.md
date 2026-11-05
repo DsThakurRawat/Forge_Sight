@@ -338,3 +338,28 @@ and the same fit-anchor output. All 78 tests pass and all four environments'
 package inventories are unchanged. No defect accuracy, type, severity, optimized
 latency or device compliance is inferred. Next is normal-validation calibration
 and threshold policy before any final-holdout evaluation.
+
+## 020: Separate map fitting from normal-score threshold calibration
+
+Use a deterministic 22/22 subdivision of the existing 44 normal validation
+samples. Keep the outer frozen manifest and the trained networks/teacher
+statistics unchanged. Fit upstream q90/q99.5 branch scales on the first subset;
+use only the other subset for a predeclared finite-sample rank threshold.
+
+The provisional nominal normal-flagging level is 5%, not a user-certified
+production requirement or a recall guarantee. With n=22 the selected rank is
+22, giving threshold 0.22776579856872559 and strict greater-than comparison.
+The rank interpretation assumes exchangeability and an independently fixed
+score function; device/domain/part independence are unverified. Reject
+unsupported finite thresholds instead of promising 1% from 22 examples.
+
+Keep candidate flags separate from final quality grades, probabilities and
+severity. Preserve all three known-normal flags from the map-fit subset and
+the zero threshold-set flags by construction; neither is an independent error
+estimate. No defect images were inspected or thresholds retuned to hide flags.
+
+Bind policy and calibrated checkpoint fingerprints and verify an independent
+reload, including equality at threshold. Raw normalization conformance error
+is below 3e-8; reloaded anchor scores match exactly. All 86 tests pass. Actual
+trained PC-only model timing is recorded with scope limits. Next evaluate the
+frozen model/policy once on the reserved holdout, without tuning on its results.

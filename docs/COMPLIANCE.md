@@ -22,6 +22,14 @@ threshold, accuracy, defect type and severity are still unverified. Training
 loss reduction is not acceptance evidence for those requirements. See
 `manifests/efficientad_s_training_v1.json` and `docs/VISION_TRAINING.md`.
 
+Stage 3.3 adds map normalization and a frozen normal-only candidate threshold.
+It uses 22 map-fit plus 22 separate threshold normals, with zero holdout reads
+and unchanged trained network weights. Three map-fit normals are flagged and
+zero threshold normals are flagged by construction; neither is independent
+accuracy evidence. Model-only desktop timing and successful bundle reload do
+not verify defect recall, production false alarms, final grades, or Jetson
+performance. All 86 tests pass. See `docs/VISION_CALIBRATION.md`.
+
 The [organizer clarification shared by the user](ORGANIZER_CLARIFICATION.md)
 accepts the Jetson Orin platform family for PS5, subject to the mandatory
 technologies. It clears the platform-eligibility question; actual device

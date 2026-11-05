@@ -383,3 +383,27 @@ with no pass/reject threshold. Next, use the 44 reserved normals to calibrate
 the map branches and document a threshold policy. Final held-out accuracy,
 defect type/severity, trained low-latency deployment and all Jetson/offline
 requirements remain separate evidence.
+
+## Stage 3.3: Turn two map signals into a reproducible candidate rule
+
+Calibration changes scales and a cutoff, not the learned teacher/student/AE
+weights. We used 22 reserved normal images to make the two map branches
+comparable, then 22 different normals to set an image-score threshold. Keeping
+those jobs separate avoids claiming independent threshold calibration after
+fitting the score function on the same examples.
+
+The declared rank policy sets a provisional threshold of 0.2277658. A score
+strictly above it is an anomaly candidate; equality remains a normal candidate
+and nonfinite values are errors. Scores are not probabilities, severity or
+final quality grades. The 5% nominal level relies on assumptions that are not
+verified production behavior, and 22 threshold normals cannot support a finite
+1% rank cutoff.
+
+The threshold-setting normals have zero flags by construction. Three map-fit
+normals were flagged; their paths/scores remain in the report. These are
+calibration diagnostics, not independent accuracy. No defects or holdout pixels
+were read. The saved bundle reloads with exact anchor scores and unchanged
+trained weights/statistics. All 86 tests pass. Actual calibrated desktop FP32
+model-only p50/p95 is 14.54/14.80 ms; image I/O, transfers, app work, Llama and
+Jetson behavior remain outside that timing. Next is the frozen-policy final
+holdout evaluation to measure real misses and false alarms.

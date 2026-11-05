@@ -15,7 +15,7 @@ inference remains blocked by device unavailability. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The device capture harness still refuses this PC as a Jetson target. All 78
+The device capture harness still refuses this PC as a Jetson target. All 86
 project tests pass. Desktop text is real; advice quality, defect detection,
 Jetson performance, and disconnected operation remain unverified.
 
@@ -27,10 +27,18 @@ PatchCore candidates. These are not accuracy or Jetson benchmarks. See
 
 Stage 3.2 completed real EfficientAD-S training: 10,000 FP32 updates on the 176
 normal fitting images, with the verified teacher and generic-image regularization.
-The final checkpoint passes independent reload/state/output checks. It remains
-uncalibrated; accuracy and a pass/reject threshold are not established. No
+The final checkpoint passes independent reload/state/output checks. Its original
+training snapshot remains uncalibrated. No
 validation or holdout pixels were used in training. See the
 [training evidence, learning curve, and commands](docs/VISION_TRAINING.md).
+
+Stage 3.3 fitted a separate calibrated model/policy bundle using 22 map-fitting
+and 22 threshold-setting normals. The provisional image-score threshold is
+0.2277658; this yields candidate flags, not quality grades or probabilities.
+Three map-fitting normals were flagged; zero threshold-setting normals were
+flagged by construction. Independent accuracy and recall remain unevaluated.
+The trained calibrated PC model measured 14.54/14.80 ms p50/p95 for cached-input
+FP32 forward only. See [calibration evidence and limits](docs/VISION_CALIBRATION.md).
 
 ## Start here
 
@@ -93,7 +101,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 78 current data-integrity, edge, training-boundary and measurement tests:
+Run the 86 current data-integrity, edge, training/calibration-boundary and measurement tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v

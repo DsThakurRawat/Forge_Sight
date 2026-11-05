@@ -5,6 +5,9 @@ partition. It does not select a pass/reject threshold, measure defect accuracy,
 read final-holdout images, export an optimized engine, or verify Jetson execution.
 The planned run completed successfully and its final checkpoint passed an
 independent reload. The result remains explicitly uncalibrated and unevaluated.
+The later [Stage 3.3 calibration record](VISION_CALIBRATION.md) describes a
+separate calibrated checkpoint/policy; the original training snapshot stays
+unchanged and no accuracy result is implied by calibration.
 
 ## Sources and verified local assets
 

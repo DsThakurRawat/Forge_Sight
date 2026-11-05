@@ -182,3 +182,10 @@ integrity and independent CUDA reload passed. See
 [training assets, recipe and scope](VISION_TRAINING.md). The raw assets,
 checkpoints, plot and logs remain ignored; no trained inference optimization,
 accuracy result or Jetson software setup is established by training.
+
+Stage 3.3 reuses the same vision environment to fit map scales and a candidate
+threshold without optimizer updates or dependency installations. It creates a
+new weights/metadata-only calibrated checkpoint, preserving the original
+training snapshots. The actual model-only FP32 timing uses the desktop CUDA GPU
+with the training recipe's math flags; it is not a Jetson or end-to-end result.
+See [calibration/reload commands and limitations](VISION_CALIBRATION.md).

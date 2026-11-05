@@ -2,11 +2,13 @@
 
 ## Current stage
 
-Stage 3, Substep 3.2: the first EfficientAD-S 256x256 FP32 baseline completed
-10,000 optimizer steps. Both archives and the small teacher are verified;
-teacher weights stayed unchanged and student/autoencoder weights updated.
-The final checkpoint passes an independent hash/state/output reload check.
-Accuracy is NOT EVALUATED; calibration and decision threshold are unset.
+Stage 3, Substep 3.3: the trained EfficientAD-S baseline now has fitted map
+scales and a frozen normal-only image-score policy. The 44 validation normals
+were split into 22 map-fit and 22 threshold-setting examples. Candidate
+threshold is 0.22776579856872559, with a provisional nominal 5% normal-flag level.
+Independent bundle reload passed. Accuracy/recall are NOT EVALUATED; candidate
+flags are not final quality grades. All trained networks and fit-only teacher
+statistics are unchanged from the 10,000-step checkpoint.
 User preference is balanced accuracy and inference time, with no fixed target.
 
 Stage 2.7 desktop Llama generation through ExecuTorch is verified. Stage 1 and
@@ -117,6 +119,17 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 3.3 fitted q90/q99.5 scales on 22 normals, then used the 22nd order
+statistic of 22 separate normal scores. The threshold group has 0 flags by
+construction; the map-fit group has 3 known-normal flags, all preserved in the
+record. Neither is an independent false-alarm estimate. Rank assumptions and
+production performance are unverified. No fit/development/holdout pixels were
+read and no optimizer updates occurred. An independent CUDA reload reproduced
+two scores exactly, including equality at threshold. All 86 tests pass.
+Actual calibrated FP32 model-only desktop p50/p95 were 14.54/14.80 ms, not camera
+or end-to-end Jetson results. See `docs/VISION_CALIBRATION.md` and
+`manifests/efficientad_s_calibration_v1.json` for the frozen bundle/provenance.
+
 Substep 3.2 uses 176 verified normal fitting images and 9,469 generic Imagenette
 train images for the unchanged upstream regularization loss. No normal-validation,
 development or final-holdout pixels enter the optimizer. Both archive hashes
@@ -218,7 +231,7 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
 | Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and program metadata; generation has separate evidence and quality remains open |
 | Desktop Llama generation via ExecuTorch | VERIFIED, PC-only smoke | Real native runner output and provenance; no device or advice-quality claim |
-| Vision model and defect-type classification | FIRST BASELINE TRAINED; accuracy/type NOT VERIFIED | Map calibration, threshold selection and real same-domain evaluation; anomaly maps alone do not classify type |
+| Vision model and defect-type classification | FIRST BASELINE TRAINED/CALIBRATED; accuracy/type NOT VERIFIED | Frozen-policy independent evaluation; candidate flags and maps alone do not classify type or grade quality |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
 Stage 1 input preparation is verified and its review gate was accepted. Stage 2
@@ -227,9 +240,8 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 3.3: load the verified trained checkpoint, calibrate the two map branches
-using the 44 normal validation images, and select/document a normal-only score
-threshold policy. Keep final holdout unavailable until model/policy are frozen
-for separate final evaluation. FP32 is the reference; lower precision and
-resolution changes require trained-quality evidence. Actual Jetson proof remains
-blocked until hardware is available; Stage 3 itself is not DONE.
+Stage 3.4: evaluate the frozen FP32 calibrated model and candidate policy once
+on the 111 reserved final-holdout images. Record actual misses/false alarms,
+continuous anomaly maps and evaluation provenance without tuning on that set.
+Review results before any different stage. Defect type, severity, optimized
+deployment and actual Jetson/offline proof remain open; Stage 3 is not DONE.
