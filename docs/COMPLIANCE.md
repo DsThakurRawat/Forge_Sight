@@ -43,7 +43,7 @@ inventory, runtime, and offline compliance still require measured evidence.
 | Severity and operator decisions | NOT VERIFIED | Versioned deterministic rules and behavior tests |
 | Useful operator recommendations | NOT VERIFIED | Actual evidence-linked advice with uncertainty and next checks |
 | Every-inspection history | NOT VERIFIED | Persisted PASS/REVIEW/REJECT/error records, restart and duplicate checks |
-| One event per physical part | NOT VERIFIED | Capture/re-arm gate; repeated frames do not inflate counts |
+| One event per physical part | REPLAY GATE VERIFIED; physical proof open | 9 replay frames produce 4 declared-part records; actual camera/identity unverified |
 | Exact eligible edge hardware | BLOCKED - NOT VERIFIED | Device-side module/RAM/architecture/JetPack inventory; device currently unavailable |
 | Llama-family inference via ExecuTorch on Jetson | BLOCKED - NOT VERIFIED | Actual locally generated text plus model/runtime/artifact provenance and measurements |
 | Physical camera validation | BLOCKED - NOT VERIFIED | Controlled real samples captured and inspected on Jetson |

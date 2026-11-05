@@ -373,3 +373,12 @@ missed scratches and both false alarms. Pixel AUROC is ranking evidence only;
 using the image threshold for response extent does not validate a damage mask.
 Do not infer defect types from folder labels. Stage 4 is now authorized by the
 user; no claim of production acceptance or Jetson proof follows these metrics.
+
+## 022: Count explicit part events rather than deduplicating image hashes
+
+Latch before the first inference attempt, including errors, and require a new
+unused declared ID to re-arm. Byte-identical images can represent distinct
+parts; image hashing provides provenance, not identity. Persist JSON records,
+map references and explicit errors now; restart-safe database handling stays
+in Stage 6. Region geometry uses the previously declared response threshold,
+8-connectivity and no morphology. All 94 tests and the real replay pass.

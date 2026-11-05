@@ -416,3 +416,12 @@ heatmaps. We froze the cutoff before testing: changing it now would turn the
 test set into another tuning set. AUROC describes ranking across possible
 cutoffs; it does not mean 97% of each defect's physical area was measured.
 Next we turn each real model result into one record for one declared part.
+
+## Stage 4: A camera frame is not a new nut
+
+One stationary nut can appear in many frames. We now accept one attempt and
+wait for a new-part signal. In the real model replay, nine frames gave four
+records, including one unreadable-input error. Two declared nuts used the same
+picture and still counted separately. Regions report response pixels and box
+size, not millimeters. Next a separate, predictable rule decides what action
+to suggest; the language model will never own that decision.

@@ -2,14 +2,14 @@
 
 ## Current stage
 
-Stage 3.4: frozen holdout evaluation completed on desktop. Of 89 defective
-images, 87 were flagged and 2 scratched nuts were missed. Of 22 good images,
-2 were flagged. Recall/precision 97.75%, image AUROC 0.975996, pixel AUROC
-0.969206. No threshold/model changes followed evaluation. All per-image maps,
-predictions and errors are saved locally; committed evaluation and exposure
-manifests record provenance. Defect type remains unknown. See
-`docs/VISION_EVALUATION.md`. Next authorized task is Stage 4 inspection records
-and one-part capture gating, followed by Stage 5 pixel-only grading.
+Stage 4: saved-image inspection records and explicit new-part capture gate
+verified on desktop. Replay: 9 frames -> 4 records, 5 suppressed repeats;
+3 actual model forwards and 1 explicit input error. All 94 tests pass.
+Geometry is model-response area/box/diagonal in pixels, not physical damage.
+See `docs/INSPECTION.md` and `manifests/inspection_replay_v1.json`.
+Stage 3.4 evaluation remains frozen: 87/89 defects flagged, 2/22 false alarms,
+two missed scratches, type unknown. No holdout reinference or model retuning.
+Next authorized task: Stage 5 deterministic pixel-only decisions.
 
 Stage 2.7 desktop Llama generation through ExecuTorch is verified. Stage 1 and
 the transition to Stage 3 were accepted by the user. Actual Stage 2 inference

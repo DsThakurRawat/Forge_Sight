@@ -46,6 +46,11 @@ model remain frozen. Types remain unknown. See [evaluation](docs/VISION_EVALUATI
 Earlier stage paragraphs above describe historical snapshots, superseded by
 this evaluation for benchmark detection only. Jetson and camera proof remain open.
 
+Stage 4 adds [real inspection records and a one-part gate](docs/INSPECTION.md).
+The saved-image replay turns 9 frames into 4 records, with 5 repeated frames
+suppressed. All 94 tests pass in the existing locked vision environment.
+Use that environment for the full suite, which now includes NumPy/OpenCV tests.
+
 ## Start here
 
 1. [Step-by-step roadmap](FORGESIGHT_STEP_BY_STEP_ROADMAP.md): authoritative
