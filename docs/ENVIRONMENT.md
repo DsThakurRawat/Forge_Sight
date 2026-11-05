@@ -156,3 +156,19 @@ TextLLMRunner, registering its quantized/custom-op libraries explicitly.
 No packages or source builds were added; both original environment inventories
 still match their baseline. Quality, device execution, and offline operation
 remain unverified. See the [generation evidence](EDGE_RUNTIME.md#27-real-desktop-generation).
+
+## Isolated desktop GPU vision environment (Stage 3.1)
+
+The new environment is `/root/.cache/forgesight/vision-v1/venv`. It contains
+PyTorch 2.6.0+cu124, torchvision 0.21.0+cu124, Anomalib 2.6.2, NumPy 2.2.6,
+timm 1.0.31 and Lightning 2.6.6. `requirements/pylock.vision.toml` pins 89
+dependencies, excluding bundled pip. CPU/image/shared GPU/ExecuTorch environments
+were not upgraded or used as an installation target. This CUDA x86_64 lock
+must not be installed as the Jetson ARM64 software stack.
+
+Dependency checking, actual CPU/CUDA architecture probes, and a fresh temporary
+lock-only installation with real CUDA forward checks passed. The temporary
+environment was removed automatically. Upstream timm/dinomaly deprecation
+warnings are retained; they did not prevent the selected models' execution.
+See [vision selection and reproducible commands](VISION_BASELINE.md) for
+source pins, scope, timing caveats, and pending training assets.

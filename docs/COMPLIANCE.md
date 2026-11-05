@@ -8,6 +8,12 @@ runner, using the recorded PTE and tokenizer. The transcript is in
 on-device advisory integration and quality evaluation remain open. All device,
 quality, performance, and offline acceptance requirements below remain open.
 
+Stage 3.1 selects EfficientAD-S using clearly labeled untrained architecture
+timings and resource trade-offs, not accuracy results. The model has not been
+fitted/trained. No dataset or holdout pixels were read by the probes. No anomaly
+score/map from this step is evidence of a working detector, defect type,
+severity, or verified edge performance. See `docs/VISION_BASELINE.md`.
+
 The [organizer clarification shared by the user](ORGANIZER_CLARIFICATION.md)
 accepts the Jetson Orin platform family for PS5, subject to the mandatory
 technologies. It clears the platform-eligibility question; actual device

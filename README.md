@@ -15,9 +15,15 @@ inference remains blocked by device unavailability. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The device capture harness still refuses this PC as a Jetson target. All 67
+The device capture harness still refuses this PC as a Jetson target. All 70
 project tests pass. Desktop text is real; advice quality, defect detection,
 Jetson performance, and disconnected operation remain unverified.
+
+Stage 3.1 selected EfficientAD-S at 256x256 for first training, balancing fixed
+runtime cost, memory and potential lower precision. Actual untrained architecture
+probes compared it with medium/higher-resolution variants and compact/heavier
+PatchCore candidates. These are not accuracy or Jetson benchmarks. See
+[the trade-offs, measurements and training prerequisites](docs/VISION_BASELINE.md).
 
 ## Start here
 
@@ -80,7 +86,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 67 current data-integrity and edge-preparation tests:
+Run the 70 current data-integrity, edge, and measurement-integrity tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v

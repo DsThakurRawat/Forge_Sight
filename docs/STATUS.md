@@ -2,10 +2,13 @@
 
 ## Current stage
 
-Stage 2, Substep 2.7: actual desktop Llama generation through ExecuTorch verified.
-The exported PTE and tokenizer retain their recorded fingerprints; the native
-runner produced a coherent response to the controlled lighting prompt.
-Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
+Stage 3, Substep 3.1: EfficientAD-S at 256x256 selected for first training after
+actual desktop runtime/latency/memory probes. No vision detector has been fitted
+or trained; accuracy is NOT EVALUATED. User preference is balanced accuracy and
+inference time, with no fixed latency/production target.
+
+Stage 2.7 desktop Llama generation through ExecuTorch is verified. Stage 1 and
+the transition to Stage 3 were accepted by the user. Actual Stage 2 inference
 on Jetson is BLOCKED - NOT VERIFIED: the device is unavailable. Desktop text
 generation is verified; device execution, quality, and offline proof are not.
 
@@ -13,7 +16,7 @@ The organizer reply shared by the user confirms Jetson Orin platform-family
 eligibility for PS5, conditional on mandatory Llama, on-device ExecuTorch, and
 local defect/quality-control operation without cloud dependency. See
 `docs/ORGANIZER_CLARIFICATION.md`. Actual hardware and execution gates remain
-open; the next task is unchanged.
+open; desktop vision work proceeds under the roadmap's hardware-blocker rule.
 
 ## Evidence already observed
 
@@ -112,6 +115,20 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 3.1 prepared a separate GPU environment with Anomalib 2.6.2 and
+PyTorch/torchvision 2.6.0/0.21.0+cu124. Both model modules match the pinned
+Anomalib source hashes. Seventeen untrained synthetic case measurements across
+two runs (including a repeated EfficientAD-S AMP case)
+covered EfficientAD-S/M, 256/384 inputs, PatchCore ResNet-18/Wide-ResNet-50,
+bank-size changes, CPU/GPU, and AMP compatibility. Zero dataset pixels or
+holdout images were read and zero optimizer steps were taken. FP32 compact
+PatchCore was faster on this PC; the primary choice favors fixed-cost,
+bank-free EfficientAD-S with measured memory and optional AMP headroom.
+Accuracy, trained FP16 behavior, TensorRT, and Jetson latency remain unverified.
+The 89-dependency lock reproduced in a fresh temporary environment; all 70
+project tests pass. See `docs/VISION_BASELINE.md`, the candidate config, and
+the architecture-probe manifest. Teacher/regularization assets remain pending.
+
 Substep 2.7 uses the installed native TextLLMRunner via its Python bindings,
 with no new packages or compilation. The first attempt failed on unregistered
 4-bit embedding/cache/attention kernels. Explicitly loading the wheel's two
@@ -186,7 +203,7 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
 | Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and program metadata; generation has separate evidence and quality remains open |
 | Desktop Llama generation via ExecuTorch | VERIFIED, PC-only smoke | Real native runner output and provenance; no device or advice-quality claim |
-| Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
+| Vision model and defect-type classification | BASELINE SELECTED; accuracy/type NOT VERIFIED | First training and real same-domain evaluation; anomaly maps alone do not classify type |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
 Stage 1 input preparation is verified and its review gate was accepted. Stage 2
@@ -195,9 +212,9 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 3.1: check PatchCore/EfficientAD installation and runtime compatibility on
-this PC, then select the first normal/anomaly vision baseline using the existing
-training/validation policy. Do not consume final-holdout images. Fit/train the
-selected baseline in the following focused substep, not in the Llama smoke test.
-Jetson proof remains blocked until hardware is available. Proceed with desktop
-vision work after review under the roadmap's explicit hardware-blocker rule.
+Stage 3.2: review/acquire and hash-verify the selected teacher/Imagenette assets,
+connect the frozen fit/validation roles, and train EfficientAD-S with a saved
+reproducible checkpoint. Keep final holdout unavailable. FP32 is the reference;
+lower precision/resolution changes require trained-quality evidence. Threshold
+selection and final evaluation follow their own checks. Jetson proof remains
+blocked until hardware is available; Stage 3 itself is not DONE.

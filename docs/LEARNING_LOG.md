@@ -329,3 +329,31 @@ guards without simulated generation. Desktop generation works, but quantized
 advisory quality, actual Jetson execution and offline end-to-end inspection
 remain open. Next, select a compatible vision baseline in Stage 3.1; fitting
 or training follows that selection.
+
+## Stage 3.1: Choose for a useful accuracy/speed balance
+
+Model inference time is different from training time and from camera-to-result
+latency. A model can be quick to fit yet costly to run: PatchCore searches a
+normal-feature bank at inference. EfficientAD pays optimization training cost
+once, then runs fixed teacher/student/autoencoder networks. Neither approach's
+accuracy follows from parameter count or a successful forward pass.
+
+We measured real untrained model code with synthetic inputs, not a fake defect
+detector: zero dataset pixels and optimizer steps. Fifty samples after ten
+warmups provide model-only desktop p50/p95, not Jetson or whole-app performance.
+Compact PatchCore was faster in FP32, while EfficientAD-S used fixed parameters
+and had a useful lower-precision execution path. Larger models and higher input
+resolution cost more. Smaller banks or lower precision can change accuracy,
+so the fastest timing is not automatically the right model.
+
+EfficientAD-S 256 is selected for first training, with PatchCore-ResNet-18 kept
+as a fallback. Thin scratches may disappear when resizing 700 to 256; higher
+resolution needs trained-quality checks and recalibration. Neither map branch
+supplies defect-type labels or deterministic severity. Llama stays a separate
+asynchronous ExecuTorch worker and its real Jetson proof remains mandatory.
+
+The isolated GPU environment and fresh lock-only CUDA checks pass; both model
+modules match pinned upstream source. All 70 tests pass, including integrity of
+percentile reporting and memory-bank sizing. Teacher and Imagenette training
+assets are still pending. Next: verify those assets and train on the 176 frozen
+normal fit images, preserving 44 normal validation images and the final holdout.

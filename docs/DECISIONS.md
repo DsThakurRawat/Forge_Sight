@@ -285,3 +285,30 @@ All 67 tests pass; unit tests exercise prompt/control/budget guards without
 fake model replies. Both older environment inventories remain unchanged. Next
 is Stage 3.1 vision-baseline compatibility/selection under the roadmap's device
 blocker rule; stop for review before that different stage.
+
+## 018: Balance accuracy risk, latency and fixed deployment cost
+
+The user prioritizes good accuracy with lower inference time and sets no hard
+latency or production-rate limit. Select EfficientAD-S at 256x256 for first
+training; keep PatchCore-ResNet-18 as the fallback/comparator. This is not a
+trained accuracy comparison or final device model selection.
+
+Actual synthetic probes showed compact PatchCore faster in FP32 on the desktop,
+but its search cost/memory grew with the bank. EfficientAD-S has fixed parameter
+storage, no growing feature-bank search, measured lower GPU allocation than the
+larger-bank comparison, and an executable AMP path. Medium/higher-resolution
+variants cost more without measured quality gains yet. Keep all observations,
+including variation between AMP runs, rather than select the fastest number.
+
+Train/evaluate with FP32 reference and frozen data roles. Only adopt lower
+precision after trained-score/map/threshold checks; 256 can hide thin scratches
+and 384 requires separately validated training/calibration. Keep subtype and
+severity gaps open. Teacher/Imagenette assets and their terms/hashes require
+verification before fitting; do not silently change the loss or teacher.
+
+The separate Anomalib 2.6.2/CUDA 12.4 environment matches the tested stack.
+Installed model sources match the pinned commit; the locked setup reproduces.
+All 70 tests pass. Jetson memory/latency, TensorRT, Llama contention and end-to-end
+performance remain unverified. No pretrained model or dataset pixels were used
+in the architecture timing probes. See `docs/VISION_BASELINE.md` for sources,
+alternatives and measurements. The next task is actual first training.
