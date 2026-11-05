@@ -2,11 +2,11 @@
 
 ## Current stage
 
-Stage 2, Substep 2.5: isolated CPU export environment and pinned source checkout
-verified through actual CLI startup and structured recipe parsing.
+Stage 2, Substep 2.6: actual quantized Llama export completed; artifact
+fingerprint, serialized XNNPACK delegation, and program metadata loading verified.
 Stage 1 was accepted by the user's request to continue. Actual Stage 2 inference
-is BLOCKED - NOT VERIFIED: device unavailable; conversion and native runner
-build have not run. No actual model inference has been performed.
+is BLOCKED - NOT VERIFIED: device unavailable; native runner/generation are not
+verified. No actual model text generation has been performed.
 
 ## Evidence already observed
 
@@ -105,6 +105,18 @@ its actual commit hash and push result are supplied in the final step report.
 
 ## Open gates
 
+Substep 2.6 exported the actual pinned checkpoint using 8da4w and 4-bit
+embeddings. Conversion exited 0 after 248.46 seconds on desktop WSL; sampled
+export-process peak RSS was 8,237,948 KiB, not device inference memory. The
+802,247,040-byte PTE has SHA-256
+`b82d0de5e0785269112d818be5a6c675225aab02c4e2a3b6c98d9e599da86739`.
+ExecuTorch's InternalConsistency program load succeeded; metadata contains ten
+methods and an XnnpackBackend delegate for forward. No method was executed.
+The output-name suffix initially bypassed output_dir; the original is preserved
+and a hash-identical copy is under ignored artifacts. The corrected recipe
+was checked against upstream's real filename resolver. All 63 tests pass;
+both original environments remain unchanged. See the committed export manifest.
+
 Substep 2.5 installed a separate WSL/Linux-filesystem environment with
 ExecuTorch 1.5.1+cpu, PyTorch 2.14.0+cpu, and TorchAO 0.18.0. The source checkout
 matches the pinned commit; source and installed config schemas match the
@@ -152,6 +164,7 @@ device-only operation correctly exited 2. See `docs/EDGE_RUNTIME.md`.
 | Exact Jetson hardware and camera | BLOCKED - NOT VERIFIED | Device unavailable; need device-side inventory |
 | Llama through ExecuTorch on Jetson | BLOCKED - NOT VERIFIED | Actual device-generated text, runner/version/hash, memory and timing |
 | Meta Llama access and local source assets | VERIFIED | User-confirmed access; five files match pinned publisher metadata |
+| Desktop Llama export and artifact metadata | VERIFIED, not inference | Recorded PTE hash and real ExecuTorch program load; generation/quality untested |
 | Vision model and defect-type classification | NOT STARTED | Real same-domain evaluation |
 | Offline end-to-end inspection | NOT VERIFIED | Actual disconnected Jetson run |
 
@@ -161,10 +174,9 @@ proof and do not establish a defect-inspection application.
 
 ## Next exact task
 
-Stage 2.6: attempt the actual pinned Llama export in the isolated environment,
-retain logs and provenance, and resolve any real quantization/conversion errors.
-Record a `.pte` hash only if conversion succeeds. Preserve earlier evidence
-directories and both existing development environments. An exported artifact
-will still require actual execution and quality checks; it is not Jetson proof.
+Stage 2.7: establish a desktop ExecuTorch generation smoke test using the
+exported PTE and matching tokenizer. Record actual output and runner provenance;
+diagnose any runtime/operator or tokenization failures. This remains PC-only
+evidence. Preserve the device-only capture guard and the open Jetson gate.
 Jetson proof remains blocked until actual hardware is available. Independent
 Stage 3 PC work remains permitted after review under the roadmap's blocker rule.

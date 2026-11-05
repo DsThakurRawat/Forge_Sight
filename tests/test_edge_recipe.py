@@ -20,6 +20,7 @@ class RecipeTests(unittest.TestCase):
         validate_export_config(config, self.schema)
         self.assertEqual(config["quantization"]["qmode"], "8da4w")
         self.assertTrue(config["backend"]["xnnpack"]["enabled"])
+        self.assertEqual(config["export"]["output_name"], "llama3_2_1b_xnnpack")
 
     def test_unknown_upstream_key_is_rejected(self):
         config = export_config(self.profile, Path("weights"), Path("output"))

@@ -40,7 +40,9 @@ def export_config(profile: dict, weights: Path, output: Path) -> dict:
         "export": {"max_seq_length": profile["max_seq_length"],
                    "max_context_length": profile["max_context_length"],
                    "output_dir": str((output / "exported").resolve()),
-                   "output_name": "llama3_2_1b_xnnpack.pte"},
+                   # Upstream treats names ending in .pte as verbatim paths,
+                   # bypassing output_dir. A stem keeps output under that directory.
+                   "output_name": "llama3_2_1b_xnnpack"},
         "debug": {"verbose": True},
     }
 

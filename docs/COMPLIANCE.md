@@ -2,11 +2,11 @@
 
 No challenge requirement is marked satisfied by repository setup alone.
 
-Stage 2.5 verifies an isolated desktop exporter environment, real CLI startup,
-and structured configuration parsing. No checkpoint was loaded or converted;
-no model inference was performed. Optional GPU-library warnings are retained.
-All device, quality, performance, and offline acceptance requirements below
-remain open.
+Stage 2.6 adds actual quantized model export and successful desktop ExecuTorch
+program-metadata loading with serialized XNNPACK delegation. No generation
+method has been executed and no model-generated text is verified. Optional
+GPU-library warnings are retained. All device, quality, performance, and offline
+acceptance requirements below remain open.
 
 | Requirement | Status | Acceptance evidence needed |
 | --- | --- | --- |
@@ -71,3 +71,11 @@ publisher revision. User-confirmed access and local source assets are now
 verified; fingerprint metadata is committed and all model bytes stay ignored.
 All 58 tests passed. This clears the source-asset blocker only: no model export,
 generated text, native target build, device execution, or offline proof exists.
+
+Substep 2.6 supersedes the earlier no-export snapshot: the actual PTE is
+802,247,040 bytes, with hash/provenance in `manifests/llama3_2_1b_export.json`.
+The artifact verifier loads its program metadata through the real pinned
+ExecuTorch runtime; no forward or token-metadata method is executed. XNNPACK
+delegate presence establishes serialization, not successful operator execution,
+ARM portability, generated content, quantized quality, or offline edge proof.
+All 63 tests passed. The Stage 2 device compliance gate remains open.

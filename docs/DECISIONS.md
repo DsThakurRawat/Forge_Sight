@@ -221,3 +221,26 @@ suppressed; neither successful imports nor a dependency check proves the later
 8da4w quantization/export path. Accept official +cpu build suffixes when checking
 the selected ExecuTorch release, while rejecting other releases/prereleases.
 The actual model conversion is the next separate step.
+
+## 015: Preserve actual export provenance and verify the serialized artifact
+
+Export the existing 8da4w XNNPACK candidate rather than change precision or
+runtime before observing a real attempt. Actual conversion succeeded with the
+isolated CPU tools; retain all warnings, command, config hash, input references,
+exit status, elapsed time, and sampled memory. Export timing/memory describe
+this desktop process only. Commit metadata, not the licensed checkpoint/PTE.
+
+Upstream treats output_name ending in .pte as a verbatim path and ignores
+output_dir. The successful first artifact therefore landed in the source
+checkout. Preserve it, copy it into ignored project artifacts, and confirm both
+fingerprints. Correct future recipes to use an extension-free stem and verify
+the resulting path with upstream's actual resolver. Do not claim a second
+conversion occurred to validate that path correction.
+
+Use a streaming fingerprint and pinned ET12 identifier, parse bounded metadata
+with the pinned release's private serializer helpers, require a serialized
+XNNPACK forward delegate, then perform the real runtime's default
+InternalConsistency program load. Private APIs require review on any runtime
+upgrade. No method is executed; listing methods is not generation or operator
+coverage proof. A newly re-exported artifact may have a different hash and needs
+its own reviewed provenance rather than silently replacing this reference.

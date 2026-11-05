@@ -347,3 +347,97 @@ and rejection of other release/prerelease versions.
 Next is Stage 2.6: attempt actual conversion with retained logs and record a
 `.pte` hash only after success. Native runner build, quality, offline operation,
 and performance remain unverified. Jetson Stage 2 is still BLOCKED - NOT VERIFIED.
+
+## 2.6: Actual model export
+
+The real pinned checkpoint was converted with the isolated environment and the
+reviewed XNNPACK/8da4w configuration. This supersedes earlier no-export status.
+Embedding quantization is 4-bit with group size 32; linear group size is 128.
+Sequence/context limits remain 128/512. This is a candidate configuration,
+not established operating capacity or a quality-validated assistant.
+
+| Observed export evidence | Result |
+| --- | --- |
+| Exporter return code / completion | 0 / EXITED |
+| Desktop conversion wall time | 248.46 seconds |
+| Sampled export-process peak RSS | 8,237,948 KiB (50 ms sampling; excludes other processes and may miss peaks) |
+| PTE bytes | 802,247,040 |
+| PTE SHA-256 | `b82d0de5e0785269112d818be5a6c675225aab02c4e2a3b6c98d9e599da86739` |
+| Program metadata load | Actual ExecuTorch InternalConsistency load succeeded |
+| Serialized forward delegate | XnnpackBackend |
+| Program metadata bytes / method count | 167,680 / 10 |
+| Generation / quality / Jetson execution | NOT RUN / NOT VERIFIED / BLOCKED - NOT VERIFIED |
+
+The artifact is local at
+`artifacts/edge/export_attempt_01/exported/llama3_2_1b_xnnpack.pte`.
+Only metadata is committed in `manifests/llama3_2_1b_export.json`, including
+package versions, input/config/lock hashes, and the actual process result.
+The artifact, raw logs, original assets, and provenance snapshots stay ignored.
+
+The recorded invocation ran in the pinned ExecuTorch checkout, with
+`OMP_NUM_THREADS=8`, a 1,800-second timeout and a 16 MiB log limit, using
+`capture_process` from `forgesight.edge_capture`. Its exact argv is in the
+manifest. Local evidence is under `artifacts/edge/export_attempt_01/`:
+`conversion/stdout.log`, `conversion/stderr.log`, `invocation.json`,
+`conversion_result.json`, `provenance.json`, and artifact verification reports.
+The optional TorchAO GPU-library and upstream deprecation warnings were
+retained. No dependency changes or source patches were needed for conversion.
+Both original development environments' inventories still match their baseline.
+
+### Output-path correction
+
+The first config used `output_name: llama3_2_1b_xnnpack.pte`. In the pinned
+upstream `_get_output_filename`, a name ending in .pte is treated as a verbatim
+path and bypasses output_dir. The artifact landed in the source checkout.
+That original remains preserved; the project copy has identical size/hash.
+`artifact_copy.json` records both paths. The earlier config was not rewritten.
+
+Future recipes now use `output_name: llama3_2_1b_xnnpack` with the same output_dir.
+The real upstream filename resolver confirmed the intended full path in
+`artifacts/edge/export_recipe_output_path_fixed/upstream_output_path_check.txt`.
+Conversion was not rerun merely to test the filename change.
+
+For a deliberate future re-export, generate a recipe in a fresh output
+directory, then run its recorded command with the export venv, in the pinned
+checkout, with OMP_NUM_THREADS=8. For example, from PowerShell in this project:
+
+```powershell
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m forgesight.edge_recipe --checkout /root/.cache/forgesight/et1.5.1/executorch --output artifacts/edge/export_attempt_02
+```
+
+Then in Ubuntu WSL, from the ExecuTorch checkout:
+
+```bash
+OMP_NUM_THREADS=8 /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m extension.llm.export.export_llm --config '/mnt/c/Users/RF AND SIMULATION/Desktop/honey/ForgeSight/artifacts/edge/export_attempt_02/export_config.yaml'
+```
+
+Choose a new attempt name and retain logs for every re-export. That example
+shows how to reproduce conversion; attempt_02 was not run in this substep.
+A new export needs its own reviewed fingerprint; do not overwrite this reference
+merely because another binary differs.
+
+### Verify the recorded artifact
+
+From PowerShell in this project (choose a new evidence filename on repeats):
+
+```powershell
+wsl -d Ubuntu --exec /root/.cache/forgesight/et1.5.1/venv/bin/python -B -m forgesight.edge_artifact --model artifacts/edge/export_attempt_01/exported/llama3_2_1b_xnnpack.pte --output artifacts/edge/export_attempt_01/artifact_recheck.json
+```
+
+The verifier checks the committed model/runtime reference, byte count, streaming
+hash, and pinned ET12 schema identifier. Bounded metadata parsing uses private
+helpers from this specific release; upgrades require review. It checks an
+XNNPACK forward delegate, then calls the real Runtime.load_program with default
+InternalConsistency verification. Methods include forward, BOS/EOS metadata,
+context/sequence lengths, layer count, vocabulary, and KV-cache flags.
+
+Observed status: `ARTIFACT_LOADED_NOT_INFERENCE_VERIFIED`. Listing methods does
+not load/execute forward or establish operator coverage on ARM. No generation
+method, including token-metadata methods, was executed. All 63 project tests
+pass; four new rejection tests use generic invalid files, not pretend models.
+The corrected filename was also checked through upstream's actual resolver.
+
+Next, Stage 2.7 tests actual desktop token generation through ExecuTorch with
+the matching tokenizer and exported model. PC output cannot close the mandatory
+Jetson/device or offline gates. Quantized quality and real operator advice
+require later evaluation even after a generation smoke test succeeds.

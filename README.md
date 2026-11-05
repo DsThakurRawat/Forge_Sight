@@ -6,17 +6,17 @@ and a Llama-family advisory model running on the device through ExecuTorch.
 
 **Current state:** Stage 1 data/input preparation is verified on the PC, including
 a frozen split, role-based image/mask loader, and inspected development previews. There is
-no inspection application, trained model, or verified Jetson runtime yet.
+no inspection application, trained inspection model, or verified Jetson runtime yet.
 The user reports that the Jetson is currently unavailable.
-Stage 2 preparation has started; actual Llama/ExecuTorch device inference is
-blocked by device unavailability and unprepared export/build tooling. The user
-has obtained Meta Llama access; all five original source files match the pinned
-publisher revision. See
+Stage 2.6 exported the acquired Llama 3.2 1B source model through ExecuTorch.
+The 802,247,040-byte PTE passes fingerprint and program-metadata loading checks;
+its forward graph contains an XNNPACK delegate. Actual Llama/ExecuTorch device
+inference remains blocked by device unavailability. See
 [the runtime evidence and candidate](docs/EDGE_RUNTIME.md).
 The source-pinned export recipe is preparation only; it reports its missing
 inputs and does not download weights, install packages, or create a model.
-The capture harness also refuses this PC as a Jetson target. All 58 project
-tests pass; there is still no exported Llama artifact or generated model text.
+The capture harness also refuses this PC as a Jetson target. All 63 project
+tests pass; no generation method has been executed and no model text is verified.
 
 ## Start here
 
@@ -79,7 +79,7 @@ samples. The red overlays are dataset annotations, not detector predictions.
 The source, license, manifest fingerprint, and pixel-area metadata accompany
 the image in `preview.json`. No holdout images are displayed.
 
-Run the 59 current data-integrity and edge-preparation tests:
+Run the 63 current data-integrity and edge-preparation tests:
 
 ```powershell
 wsl -d Ubuntu --exec .venv/bin/python -B -m unittest discover -s tests -v
@@ -97,7 +97,10 @@ wsl -d Ubuntu --exec .venv/bin/python -B -m forgesight.edge_assets
 The verified source weights are not an exported `.pte` or a successful runtime
 test. A separate CPU export environment now passes real exporter startup and
 configuration parsing. Its [locked setup and checks](docs/EDGE_RUNTIME.md#25-isolated-export-environment)
-are verified on this WSL host; actual conversion and Jetson execution remain open.
+are verified on this WSL host. Actual conversion and program metadata loading
+now pass; generation, quality, and Jetson execution remain open. The
+[export record and verification command](docs/EDGE_RUNTIME.md#26-actual-model-export)
+keep these distinct.
 
 ## Development
 

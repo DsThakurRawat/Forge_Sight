@@ -149,4 +149,7 @@ filesystem. CPU PyTorch 2.14.0+cpu and ExecuTorch 1.5.1+cpu passed actual startu
 and configuration checks. The shared CUDA environment also remains unchanged.
 The 86-dependency lock was reproduced in a fresh temporary venv. See
 [export setup and limitations](EDGE_RUNTIME.md#25-isolated-export-environment)
-for pinned versions, commands, logs, and unresolved conversion/device gates.
+for pinned versions, commands, and logs. Stage 2.6 subsequently completed actual
+conversion and program metadata loading in that same environment, without
+dependency changes. Generation, quality, and device execution remain unverified;
+see the [actual export record](EDGE_RUNTIME.md#26-actual-model-export).

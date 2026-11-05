@@ -275,3 +275,28 @@ Optional TorchAO GPU libraries reported load warnings. These did not prevent
 startup, but quantization compatibility remains unproven until real conversion.
 No checkpoint was loaded, no model exported, and no text generated. Next:
 attempt the real export and inspect its result before building a device runner.
+
+## Stage 2.6: Convert source weights into an ExecuTorch program
+
+Source weights contain learned numbers. Export combines those numbers with a
+computation graph in the runtime's PTE format. The selected 8da4w path uses
+dynamic 8-bit activations and 4-bit linear weights; embeddings use 4-bit groups
+of 32. Other operations can retain higher precision. Smaller storage alone
+does not establish acceptable advice quality or faster execution on Jetson.
+
+We kept the reviewed XNNPACK recipe instead of switching to a larger-precision
+fallback or another runtime. The real conversion succeeded in 248.46 seconds
+on desktop WSL and produced 802,247,040 bytes. The file's recorded hash detects
+later byte changes. ExecuTorch loads its program metadata, including forward,
+token metadata, and an XNNPACK delegate. No method was executed or text generated.
+
+The real run exposed a filename rule missed by configuration-key checks:
+an output name ending in .pte bypasses output_dir. Preserve that first output,
+verify an identical local copy, and use a stem in future recipes. The actual
+upstream resolver confirms the corrected path without another full conversion.
+
+All 63 tests pass, including corruption, wrong-format, missing-file, and
+reference-mismatch guards. These tests reject generic invalid files; they do
+not simulate a successful model. Both original environments remain unchanged.
+Next is a real desktop generation smoke test; hardware, quality evaluation,
+offline operation, and the mandatory Jetson proof still need separate evidence.
