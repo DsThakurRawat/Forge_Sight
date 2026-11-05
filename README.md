@@ -40,6 +40,12 @@ flagged by construction. Independent accuracy and recall remain unevaluated.
 The trained calibrated PC model measured 14.54/14.80 ms p50/p95 for cached-input
 FP32 forward only. See [calibration evidence and limits](docs/VISION_CALIBRATION.md).
 
+Stage 3.4 now supplies real held-out evidence: 87/89 defects detected, two
+missed scratched nuts, and two false alarms among 22 good images. Threshold and
+model remain frozen. Types remain unknown. See [evaluation](docs/VISION_EVALUATION.md).
+Earlier stage paragraphs above describe historical snapshots, superseded by
+this evaluation for benchmark detection only. Jetson and camera proof remain open.
+
 ## Start here
 
 1. [Step-by-step roadmap](FORGESIGHT_STEP_BY_STEP_ROADMAP.md): authoritative

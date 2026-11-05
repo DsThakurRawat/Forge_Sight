@@ -363,3 +363,13 @@ reload, including equality at threshold. Raw normalization conformance error
 is below 3e-8; reloaded anchor scores match exactly. All 86 tests pass. Actual
 trained PC-only model timing is recorded with scope limits. Next evaluate the
 frozen model/policy once on the reserved holdout, without tuning on its results.
+
+## 021: Expose the frozen holdout once and retain every failure
+
+Use the unchanged calibrated FP32 bundle, strict image threshold and original
+source-grid masks for evaluation. Save all predictions/maps; guard repeated
+inference with an exposure ledger. Recompute reports from caches. Preserve both
+missed scratches and both false alarms. Pixel AUROC is ranking evidence only;
+using the image threshold for response extent does not validate a damage mask.
+Do not infer defect types from folder labels. Stage 4 is now authorized by the
+user; no claim of production acceptance or Jetson proof follows these metrics.

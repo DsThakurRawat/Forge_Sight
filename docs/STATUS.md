@@ -2,14 +2,14 @@
 
 ## Current stage
 
-Stage 3, Substep 3.3: the trained EfficientAD-S baseline now has fitted map
-scales and a frozen normal-only image-score policy. The 44 validation normals
-were split into 22 map-fit and 22 threshold-setting examples. Candidate
-threshold is 0.22776579856872559, with a provisional nominal 5% normal-flag level.
-Independent bundle reload passed. Accuracy/recall are NOT EVALUATED; candidate
-flags are not final quality grades. All trained networks and fit-only teacher
-statistics are unchanged from the 10,000-step checkpoint.
-User preference is balanced accuracy and inference time, with no fixed target.
+Stage 3.4: frozen holdout evaluation completed on desktop. Of 89 defective
+images, 87 were flagged and 2 scratched nuts were missed. Of 22 good images,
+2 were flagged. Recall/precision 97.75%, image AUROC 0.975996, pixel AUROC
+0.969206. No threshold/model changes followed evaluation. All per-image maps,
+predictions and errors are saved locally; committed evaluation and exposure
+manifests record provenance. Defect type remains unknown. See
+`docs/VISION_EVALUATION.md`. Next authorized task is Stage 4 inspection records
+and one-part capture gating, followed by Stage 5 pixel-only grading.
 
 Stage 2.7 desktop Llama generation through ExecuTorch is verified. Stage 1 and
 the transition to Stage 3 were accepted by the user. Actual Stage 2 inference

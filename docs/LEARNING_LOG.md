@@ -407,3 +407,12 @@ trained weights/statistics. All 86 tests pass. Actual calibrated desktop FP32
 model-only p50/p95 is 14.54/14.80 ms; image I/O, transfers, app work, Llama and
 Jetson behavior remain outside that timing. Next is the frozen-policy final
 holdout evaluation to measure real misses and false alarms.
+
+## Stage 3.4: Test on pictures the model did not train on
+
+The model flagged 87 of 89 defective nuts and two of 22 good nuts. It missed two
+scratches. Saving every result lets us see failures instead of just attractive
+heatmaps. We froze the cutoff before testing: changing it now would turn the
+test set into another tuning set. AUROC describes ranking across possible
+cutoffs; it does not mean 97% of each defect's physical area was measured.
+Next we turn each real model result into one record for one declared part.

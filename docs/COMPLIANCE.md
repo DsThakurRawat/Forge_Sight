@@ -38,7 +38,7 @@ inventory, runtime, and offline compliance still require measured evidence.
 | Requirement | Status | Acceptance evidence needed |
 | --- | --- | --- |
 | Jetson Orin platform-family eligibility for PS5 | CONFIRMED in organizer reply shared by user | Recorded clarification; exact device inventory and deployment remain separate gates |
-| Real surface anomaly detection | NOT VERIFIED | Real model scores/maps and held-out evaluation |
+| Real surface anomaly detection | VERIFIED on PC benchmark only | Frozen holdout: 87/89 defects, 2/22 false alarms; see VISION_EVALUATION.md. Camera/edge remain open |
 | Defect type | NOT VERIFIED | Same-domain labeled evaluation; retain `unknown` when unsupported |
 | Severity and operator decisions | NOT VERIFIED | Versioned deterministic rules and behavior tests |
 | Useful operator recommendations | NOT VERIFIED | Actual evidence-linked advice with uncertainty and next checks |
