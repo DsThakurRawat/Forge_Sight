@@ -59,7 +59,6 @@ Files changed and commands explained:
 Real verification (commands and observed output):
 What is not yet verified:
 Git commit hash and push status (if any):
-Two short learning questions:
 The one specific next action:
 ```
 
