@@ -65,8 +65,17 @@ MAX_NEW_TOKENS = 64                # edge_jetson_smoke validate_budget bound
 # READY. Its output is discarded, it writes nothing, and handle() resets
 # runner state before it - and before every later request - so nothing from
 # it can leak into an advisory (the warm-vs-cold acceptance gate still binds).
+#
+# The bound is 2, not 1, because of the runner's counting contract: prefill
+# emits the first token and only the remaining max_new_tokens - 1 come from
+# the decode loop, and stats["generated_tokens"] counts the decode loop only
+# (ExecuTorch text_llm_runner.cpp, v1.5.1 source). A request for 1 token
+# therefore reports 0 generated, which handle() rightly rejects, so the warmup
+# would fail on the real runner. 2 reports 1 when the first decode step
+# succeeds (per the v1.5.1 source; not confirmed against the installed build)
+# and keeps the check strict.
 WARMUP_REQUEST = {"prompt_text": "Runtime warmup.", "system_text": None,
-                  "max_new_tokens": 1}
+                  "max_new_tokens": 2}
 
 
 def warm_worker(worker):
@@ -82,7 +91,7 @@ def warm_worker(worker):
     return {"warmup_generate_ms": (time.perf_counter() - started) * 1000,
             "warmup_prompt_tokens": report["prompt_token_count"],
             "warmup_generated_tokens": report["stats"].get("generated_tokens"),
-            "warmup_scope": ("bounded one-token non-advisory generation at boot; "
+            "warmup_scope": ("bounded two-token non-advisory generation at boot; "
                              "absorbs lazy model load; output discarded")}
 
 
