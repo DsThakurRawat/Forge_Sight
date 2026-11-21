@@ -175,9 +175,16 @@ def inspect(args):
                 # The cold child verified the current model bytes this run.
                 record["model"]["export_sha256_verified_at"] = "THIS_INSPECTION"
         inference = json.loads(inference_path.read_text())
+        model_map_hash = sha256(model_map)
+        source_map_hash = sha256(source_map)
         if (inference["model_sha256"] != args.model_sha256
                 or inference["tensor_sha256"] != tensor_hash
-                or inference["threshold"] != policy["image_threshold"]):
+                or inference["threshold"] != policy["image_threshold"]
+                or inference.get("map_sha256") != model_map_hash
+                or inference.get("source_map_sha256") != source_map_hash):
+            # The producer must declare the digests of the maps it wrote, and
+            # they must match the bytes on disk. Shape/finiteness checks alone
+            # would bless swapped or regenerated maps as this run's evidence.
             raise ValueError("Inconsistent inference evidence.")
         values = np.load(source_map, allow_pickle=False)
         if values.shape != (height, width) or not np.isfinite(values).all():
@@ -187,9 +194,9 @@ def inspect(args):
         record["geometry"] = response_regions(
             values, policy["image_threshold"], mvtec_nut_layout=args.mvtec_benchmark_upload)
         record["artifacts"].update({"score_map_model": str(model_map),
-                                    "score_map_model_sha256": sha256(model_map),
+                                    "score_map_model_sha256": model_map_hash,
                                     "score_map_source": str(source_map),
-                                    "score_map_source_sha256": sha256(source_map)})
+                                    "score_map_source_sha256": source_map_hash})
         with Image.open(args.image) as image:
             source = image.convert("RGB")
             support = Image.fromarray((values > policy["image_threshold"]).astype("uint8") * 110)
