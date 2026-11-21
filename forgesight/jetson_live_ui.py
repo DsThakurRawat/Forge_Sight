@@ -18,7 +18,7 @@ from PIL import Image
 
 from forgesight.assist_display import advice_for
 from forgesight.assist_queue import AdvisoryQueue
-from forgesight.operation_log import configure_operation_log, operation_logger
+from forgesight.operation_log import configure_operation_log, operation_logger, scrub
 from forgesight.storage import InspectionStore, new_correction
 from forgesight.vision_edge_live_once import MODEL_SHA256, sha256
 
@@ -233,7 +233,12 @@ class LiveService:
         self.worker_respawn_lock = Lock()
         self.worker_respawning = False
         if args.vision_worker_socket is not None:
-            self.vision_worker = launch_vision_worker(args)
+            try:
+                self.vision_worker = launch_vision_worker(args)
+            except Exception:
+                _log.exception("Vision worker failed to start at boot.")
+                raise
+            _log.info("Vision worker started at boot.")
         self.lock = Lock()
         self.busy = False
         self.latest = None
@@ -257,6 +262,10 @@ class LiveService:
                 # Advice is optional: keep serving inspections cold; the boot
                 # error stays visible in advice_state instead of crashing the UI.
                 self.advice_worker_boot_error = str(error)
+                _log.error("Advisory worker failed to start at boot; requests "
+                           "cold-fall back and retry: %s", scrub(error))
+            else:
+                _log.info("Advisory worker started at boot.")
 
     def _inspect_inline(self, image, part_id, root, mode_flags):
         """Run the same inspection in this long-lived process; worker mode only.
@@ -407,10 +416,33 @@ class LiveService:
         recovered.add(inspection_id)
         try:
             result = future.result()
-            summary = json.loads(result.stdout) if result is not None and result.stdout else {}
-        except Exception:
-            return  # a killed or crashed replay carries no summary; nothing to learn
-        if isinstance(summary, dict) and summary.get("persistent_worker_unhealthy"):
+        except Exception as error:
+            # A killed or crashed replay carries no summary; the outcome
+            # still belongs in the operation log.
+            _log.error("Advice request for inspection %s could not be collected: %s",
+                       inspection_id, scrub(error))
+            return
+        summary = {}
+        if result is not None and result.stdout:
+            try:
+                parsed = json.loads(result.stdout)
+                if isinstance(parsed, dict):
+                    summary = parsed
+            except ValueError:
+                pass
+        returncode = getattr(result, "returncode", None)
+        status = summary.get("status") or "NO_REPORT"
+        if returncode == 0:
+            _log.info("Advice request for inspection %s finished: status=%s",
+                      inspection_id, status)
+        else:
+            stderr_tail = ""
+            if result is not None and result.stderr:
+                stderr_tail = result.stderr[-400:]
+            _log.error("Advice request for inspection %s failed: returncode=%s "
+                       "status=%s stderr_tail=%s",
+                       inspection_id, returncode, status, scrub(stderr_tail))
+        if summary.get("persistent_worker_unhealthy"):
             self._respawn_advice_worker()
 
     def request_advice(self):

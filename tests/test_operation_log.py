@@ -11,7 +11,9 @@ import unittest
 from unittest import mock
 
 from forgesight.jetson_live_ui import LiveService
-from forgesight.operation_log import LOGGER_NAME, configure_operation_log, operation_logger
+from forgesight.operation_log import (LOGGER_NAME, _ScrubFilter,
+                                      configure_operation_log, operation_logger,
+                                      scrub)
 
 
 class ListHandler(logging.Handler):
@@ -41,6 +43,9 @@ class OperationLogTests(unittest.TestCase):
             self.logger.removeHandler(handler)
         for handler in self.saved_handlers:
             self.logger.addHandler(handler)
+        for existing in list(self.logger.filters):
+            if isinstance(existing, _ScrubFilter):
+                self.logger.removeFilter(existing)
         self.logger.setLevel(self.saved_level)
         self.logger.propagate = self.saved_propagate
 
@@ -120,6 +125,143 @@ class OperationLogTests(unittest.TestCase):
         self.assertTrue(any("insp-cold-1" in r.getMessage()
                             and r.levelno == logging.WARNING
                             for r in self.capture.records))
+
+    def test_unwritable_log_dir_degrades_to_stderr_with_warning(self):
+        with TemporaryDirectory() as folder:
+            blocker = Path(folder) / "blocker"
+            blocker.write_text("a regular file, not a directory")
+            logger = configure_operation_log(blocker / "logs")  # must not raise
+            warnings = [r for r in self.capture.records if r.levelno == logging.WARNING]
+            self.assertTrue(any("stderr only" in r.getMessage() for r in warnings))
+            self.assertTrue(any(isinstance(h, logging.StreamHandler)
+                                and not isinstance(h, RotatingFileHandler)
+                                for h in logger.handlers))
+            logger.info("still-works-after-degrade")
+
+    def test_scrub_redacts_credentials_in_messages_args_and_tracebacks(self):
+        with TemporaryDirectory() as folder:
+            logger = configure_operation_log(folder)
+            logger.info("child said token=abc123 and password = hunter2")
+            try:
+                raise ValueError("worker config api_key=zzz999")
+            except ValueError:
+                logger.exception("boot failure")
+            for handler in logger.handlers:
+                handler.flush()
+            content = (Path(folder) / "forgesight-operations.log").read_text()
+            for leaked in ("abc123", "hunter2", "zzz999"):
+                self.assertNotIn(leaked, content)
+            self.assertIn("[redacted]", content)
+            self.assertIn("boot failure", content)
+
+    def test_scrub_bounds_field_length(self):
+        text = scrub("x" * 5000)
+        self.assertLess(len(text), 600)
+        self.assertTrue(text.endswith("...[truncated]"))
+
+    def advice_service(self):
+        service = self.bare_service()
+        service.advice_recovered = set()
+        service._respawn_advice_worker = mock.Mock()
+        return service
+
+    def test_advice_completion_success_is_logged(self):
+        import json as jsonlib
+        service = self.advice_service()
+        future = mock.Mock()
+        future.done.return_value = True
+        future.result.return_value = mock.Mock(
+            returncode=0,
+            stdout=jsonlib.dumps({"status": "GENERATED_REQUIRES_HUMAN_REVIEW"}),
+            stderr="")
+        service._recover_finished_advice("insp-ok-1", future)
+        infos = [r.getMessage() for r in self.capture.records
+                 if r.levelno == logging.INFO]
+        self.assertTrue(any("insp-ok-1" in m and "finished" in m
+                            and "GENERATED_REQUIRES_HUMAN_REVIEW" in m
+                            for m in infos))
+        service._respawn_advice_worker.assert_not_called()
+
+    def test_advice_completion_failure_is_logged_with_bounded_stderr(self):
+        service = self.advice_service()
+        future = mock.Mock()
+        future.done.return_value = True
+        future.result.return_value = mock.Mock(
+            returncode=1, stdout="", stderr="crash " + "y" * 5000)
+        service._recover_finished_advice("insp-bad-1", future)
+        errors = [r for r in self.capture.records if r.levelno >= logging.ERROR]
+        self.assertTrue(any("insp-bad-1" in r.getMessage() and "failed" in r.getMessage()
+                            for r in errors))
+
+    def test_advice_completion_uncollectable_is_logged(self):
+        service = self.advice_service()
+        future = mock.Mock()
+        future.done.return_value = True
+        future.result.side_effect = RuntimeError("killed")
+        service._recover_finished_advice("insp-dead-1", future)
+        errors = [r for r in self.capture.records if r.levelno >= logging.ERROR]
+        self.assertTrue(any("insp-dead-1" in r.getMessage()
+                            and "could not be collected" in r.getMessage()
+                            for r in errors))
+
+    def boot_args(self, folder):
+        root = Path(folder)
+        vision_python = root / "vision-python"
+        vision_python.write_text("#!/bin/sh")
+        model = root / "model.ts"
+        model.write_bytes(b"model")
+        policy = root / "policy.json"
+        policy.write_text("{}")
+        manifest = root / "manifest.json"
+        manifest.write_text('{"samples": []}')
+        guidance = root / "guidance.json"
+        guidance.write_text("{}")
+        llama = root / "llama"
+        (llama / "venv/bin").mkdir(parents=True)
+        (llama / "venv/bin/python").write_text("#!/bin/sh")
+        (llama / "model").mkdir()
+        (llama / "model/llama3_2_1b_xnnpack.pte").write_bytes(b"x")
+        return argparse.Namespace(
+            vision_python=vision_python, model=model, grade_policy=policy,
+            dataset_manifest=manifest, dataset_root=root / "dataset",
+            database=root / "db.sqlite3", camera_index=0,
+            vision_worker_socket=None, advice_root=root / "advice",
+            llama_root=llama, guidance=guidance,
+            llama_worker_socket=Path("/tmp/boot-test.sock"))
+
+    def test_advice_worker_boot_failure_is_logged(self):
+        with TemporaryDirectory() as folder:
+            args = self.boot_args(folder)
+            with mock.patch("forgesight.jetson_live_ui.sha256",
+                            return_value="0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.MODEL_SHA256", "0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.DATASET_MANIFEST_SHA256",
+                            "0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.launch_advice_worker",
+                            side_effect=ValueError("socket refused")):
+                service = LiveService(args, mock.Mock())
+            self.assertEqual(service.advice_worker_boot_error, "socket refused")
+            errors = [r.getMessage() for r in self.capture.records
+                      if r.levelno >= logging.ERROR]
+            self.assertTrue(any("failed to start at boot" in m for m in errors))
+
+    def test_vision_worker_boot_failure_is_logged_and_reraised(self):
+        with TemporaryDirectory() as folder:
+            args = self.boot_args(folder)
+            args.vision_worker_socket = Path("/tmp/vision-boot-test.sock")
+            with mock.patch("forgesight.jetson_live_ui.sha256",
+                            return_value="0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.MODEL_SHA256", "0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.DATASET_MANIFEST_SHA256",
+                            "0" * 64), \
+                 mock.patch("forgesight.jetson_live_ui.launch_vision_worker",
+                            side_effect=RuntimeError("model mismatch")):
+                with self.assertRaises(RuntimeError):
+                    LiveService(args, mock.Mock())
+            errors = [r for r in self.capture.records
+                      if r.levelno >= logging.ERROR]
+            self.assertTrue(any("Vision worker failed to start at boot"
+                                in r.getMessage() for r in errors))
 
 
 if __name__ == "__main__":
