@@ -288,6 +288,20 @@ class RefusalSupportIdTests(unittest.TestCase):
         self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
 
 
+    def test_advice_internal_type_error_is_500_not_disconnect(self):
+        def broken():
+            raise TypeError("unexpected None in advice path")
+        self.service.request_advice = broken
+        request = Request(self.base + "/api/advice", method="POST", data=b"",
+                          headers={"Origin": self.base, "Content-Length": "0"})
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(request)
+        self.assertEqual(raised.exception.code, 500)
+        body = json.loads(raised.exception.read())
+        self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
+        self.assertNotIn("None", body["error"])
+
+
 class ManualReviewStoreTests(unittest.TestCase):
     def test_operator_findings_are_append_only_claims_and_do_not_change_grade(self):
         with TemporaryDirectory() as folder:

@@ -927,7 +927,8 @@ def handler_for(service):
                     code, body = _refusal_body("/api/advice", error, safe=True)
                     self.send(code, body.encode(), "application/json")
                     return
-                except (OSError, RuntimeError, sqlite3.Error) as error:
+                except (OSError, RuntimeError, TypeError, AttributeError,
+                        sqlite3.Error) as error:
                     code, body = _refusal_body("/api/advice", error, safe=False)
                     self.send(code, body.encode(), "application/json")
                     return
@@ -990,8 +991,10 @@ def handler_for(service):
 def _refusal_body(path, error, *, safe):
     """Error body with a support ID; the log line with the same ID has detail.
 
-    Validation messages are written for operators and safe to return with a
-    409. Anything else is an internal failure: the client gets a generic
+    Validation messages are operator-facing by convention and returned with
+    a 409; that is a policy for known validation paths, not a guarantee that
+    every ValueError text is safe. Anything else is an internal failure: the
+    client gets a generic
     500 message and the support ID, never raw internals; the full scrubbed
     detail is in the operation log under the same ID. The endpoint is
     normalized (no query string) before logging.
