@@ -140,6 +140,26 @@ class StorageTests(unittest.TestCase):
                 self.store.save_inspection(row)
         self.assertEqual(self.store.summary()['inspection_count'], 0)
 
+    def test_reject_decisions_the_deterministic_rules_do_not_produce(self):
+        # A syntactically valid record whose decision was altered after grading
+        # (bad import, faulty caller) must not be stored or counted: the
+        # deterministic rules are the only grading authority.
+        analyzed = next(r for r in self.records
+                        if r['status'] == 'ANALYZED' and r['decision']['grade'] != 'PASS')
+        cases = []
+        row = deepcopy(analyzed); row['decision']['grade'] = 'PASS'; cases.append(('upgraded grade', row))
+        row = deepcopy(analyzed); row['decision']['reason'] = 'OPERATOR_OVERRIDE'; cases.append(('rewritten reason', row))
+        row = deepcopy(analyzed); row['decision']['evidence'] = {}; cases.append(('stripped evidence', row))
+        for name, row in cases:
+            with self.subTest(case=name), self.assertRaises(ValueError):
+                self.store.save_inspection(row)
+        self.assertEqual(self.store.summary()['inspection_count'], 0)
+        self.assertIsNone(self.store.get_inspection(analyzed['inspection_id']))
+        # The same evidence with its honest, recomputed decision is accepted.
+        honest = deepcopy(analyzed)
+        honest['decision'] = grade_record(honest, honest['decision']['policy_snapshot'])
+        self.assertTrue(self.store.save_inspection(honest))
+
     def test_refuse_foreign_unversioned_and_future_databases_without_changing_them(self):
         for kind in ['foreign', 'future', 'unversioned']:
             path = self.root/(kind+'.sqlite3')

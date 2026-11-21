@@ -11,7 +11,7 @@ import re
 import sqlite3
 from uuid import UUID, uuid4
 
-from forgesight.grade import policy_digest, validate_policy
+from forgesight.grade import grade_record, policy_digest, validate_policy
 
 
 DEFAULT_DATABASE = Path('artifacts/runtime/inspections.sqlite3')
@@ -130,6 +130,15 @@ def _validate_record(record):
                 or decision['policy_id'] != decision['policy_snapshot']['policy_id']
                 or decision['grade'] not in GRADES or record['status'] not in STATUSES):
             raise ValueError('Invalid grade, processing status or policy fingerprint.')
+        if grade_record(record, decision['policy_snapshot']) != decision:
+            # Syntax checks alone cannot catch an impossible decision: a
+            # well-formed record whose grade was changed after grading (bad
+            # import, faulty caller) would otherwise be stored and counted.
+            # The deterministic rules are the only grading authority, so the
+            # supplied decision must be exactly what they produce from this
+            # evidence. Existing databases are unaffected: this runs only on
+            # insert, never on read.
+            raise ValueError('Decision does not match the deterministic grading rules for this evidence.')
         _text(decision['reason'], 'decision reason')
         _text(record['advice_status'], 'advice status', 128)
         _text(record['predicted_defect_type'], 'predicted type', 128)
