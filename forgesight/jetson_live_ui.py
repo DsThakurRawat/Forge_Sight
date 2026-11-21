@@ -382,10 +382,14 @@ class LiveService:
         if isinstance(advice, dict):
             recorded = advice.pop("llama_runtime_mode", None)
             advice = {**advice, **mode}
-            if advice.get("status") == "GENERATED_REQUIRES_HUMAN_REVIEW" and recorded:
+            if advice.get("status") == "GENERATED_REQUIRES_HUMAN_REVIEW":
                 # A saved advisory carries the runtime that produced it; the
-                # process alive now may not be the one that generated it.
-                advice["llama_runtime"] = recorded
+                # process alive now may not be the one that generated it. A
+                # legacy report without a recorded mode is honestly unknown,
+                # never labelled from current worker health.
+                advice["llama_runtime"] = (recorded if recorded in (
+                    "PERSISTENT_WORKER", "COLD_SUBPROCESS",
+                    "PERSISTENT_WORKER_UNREACHABLE_COLD_FALLBACK") else "NOT_RECORDED")
         return advice
 
     def _recover_finished_advice(self, inspection_id, future):
@@ -436,18 +440,14 @@ class LiveService:
             if output.exists():
                 report_path = output / "advice_report.json"
                 if report_path.is_file():
-                    # Only a terminal success blocks another request. A failed
-                    # or unreadable report must stay preserved but must not
-                    # block a fresh attempt forever: quarantine it aside the
-                    # same way as incomplete output, never delete.
-                    try:
-                        if report_path.stat().st_size > 1024 * 1024:
-                            raise ValueError("Oversized advice report")
-                        report_status = json.loads(
-                            report_path.read_text(encoding="utf-8")).get("status")
-                    except (OSError, ValueError):
-                        report_status = None
-                    if report_status == "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW":
+                    # Only a validated terminal success for THIS inspection
+                    # blocks another request: a bare claimed status without
+                    # provenance is withheld by advice_for and must not block
+                    # retry forever. Failed, unreadable or non-object reports
+                    # are quarantined aside the same way as incomplete output,
+                    # preserved, never deleted.
+                    if advice_for(record, self.advice_root)["status"] == (
+                            "GENERATED_REQUIRES_HUMAN_REVIEW"):
                         return "ALREADY_REQUESTED"
                     quarantine = output.with_name(
                         output.name + ".failed-"

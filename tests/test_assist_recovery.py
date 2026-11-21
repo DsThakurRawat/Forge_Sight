@@ -435,25 +435,80 @@ class UiRecoveryTests(unittest.TestCase):
         self.assertEqual((quarantined[0] / "prompt.txt").read_text(), "half-written")
         self.assertFalse(partial.exists())
 
+    def full_record(self, service):
+        record = json.loads(Path("manifests/graded_inspection_replay_v1.json").read_text())["records"][0]
+        record["inspection_id"] = "insp-1"
+        (service.latest_root / "record.json").write_text(json.dumps(record))
+        service.store.get_inspection.return_value = record
+        return record
+
+    def valid_report(self, record, **overrides):
+        from forgesight.assist_contract import canonical_hash
+        report = {
+            "inspection_id": "insp-1",
+            "inspection_sha256": canonical_hash(record),
+            "decision_sha256": canonical_hash(record["decision"]),
+            "authoritative_grade": record["decision"]["grade"],
+            "source_mode": "SAVED_IMAGE_REPLAY",
+            "physical_part_inspected": False,
+            "inspection_and_sqlite_unchanged": True,
+            "status": "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW",
+            "llama_runtime_mode": "PERSISTENT_WORKER",
+            "native": {"status": "GENERATED_BY_PERSISTENT_WORKER"},
+            "advisory": {
+                "inspection_id": "insp-1",
+                "inspection_sha256": canonical_hash(record),
+                "decision_sha256": canonical_hash(record["decision"]),
+                "authoritative_grade": record["decision"]["grade"],
+                "quality_grade_authority": "DETERMINISTIC_RULES_ONLY",
+                "jetson_verified": True,
+                "source_mode": "SAVED_IMAGE_REPLAY",
+                "guidance_approval": "PROTOTYPE_NOT_FACTORY_APPROVED",
+                "response": {"generated_note": "[E1] Note [G1]",
+                             "evidence_ids": ["E1", "G1"]}}}
+        report.update(overrides)
+        return report
+
     def test_complete_report_still_blocks_duplicate_request(self):
         service = self.service()
+        record = self.full_record(service)
         complete = service.advice_root / "insp-1"
         complete.mkdir()
-        (complete / "advice_report.json").write_text(json.dumps(
-            {"status": "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"}))
+        (complete / "advice_report.json").write_text(json.dumps(self.valid_report(record)))
         status, run = self.submit(service)
         self.assertEqual(status, "ALREADY_REQUESTED")
         run.assert_not_called()
         self.assertFalse(list(service.advice_root.glob("insp-1.incomplete-*")))
         self.assertFalse(list(service.advice_root.glob("insp-1.failed-*")))
 
+    def test_claimed_success_without_provenance_does_not_block_retry(self):
+        # A bare {"status": success} report is withheld by advice_for; if it
+        # also blocked requests, the UI would offer a retry the server always
+        # refuses. It is quarantined aside and a fresh attempt starts.
+        for name, content in (("claimed-success", json.dumps(
+                                  {"status": "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"})),
+                              ("json-array", "[]"),
+                              ("json-null", "null")):
+            with self.subTest(case=name):
+                service = self.service()
+                self.full_record(service)
+                claimed = service.advice_root / "insp-1"
+                claimed.mkdir()
+                (claimed / "advice_report.json").write_text(content)
+                status, run = self.submit(service)
+                self.assertEqual(status, "PENDING")
+                run.assert_called_once()
+                quarantined = list(service.advice_root.glob("insp-1.failed-*"))
+                self.assertEqual(len(quarantined), 1)
+                self.assertEqual((quarantined[0] / "advice_report.json").read_text(), content)
+                self.assertFalse(claimed.exists())
+
     def test_failed_report_is_preserved_aside_and_retried(self):
         # Reproduced from the independent sweep: a saved ADVICE_UNAVAILABLE
         # report used to block every later request with ALREADY_REQUESTED and
         # the UI disabled Generate, leaving no normal retry route.
         for name, content in (("declared-failure", json.dumps({"status": "ADVICE_UNAVAILABLE"})),
-                              ("unreadable", "{not json"),
-                              ("empty-object", "{}")):
+                              ("unreadable", "{not json")):
             with self.subTest(case=name):
                 service = self.service()
                 failed = service.advice_root / "insp-1"
@@ -504,6 +559,26 @@ class UiRecoveryTests(unittest.TestCase):
         self.assertEqual(advice["llama_runtime"], "PERSISTENT_WORKER")
         self.assertFalse(advice["advice_worker_available_now"])
         service.advice_queue.close()
+
+    def test_legacy_report_without_recorded_runtime_is_not_recorded(self):
+        # A valid success report written before runtime recording must not
+        # inherit the CURRENT worker health as its producing runtime.
+        for name, runtime in (("missing", ...), ("non-string", 42)):
+            with self.subTest(case=name):
+                service = self.service()
+                record = self.full_record(service)
+                report = self.valid_report(record)
+                if runtime is ...:
+                    del report["llama_runtime_mode"]
+                else:
+                    report["llama_runtime_mode"] = runtime
+                folder = service.advice_root / "insp-1"
+                folder.mkdir()
+                (folder / "advice_report.json").write_text(json.dumps(report))
+                advice = service.advice_state()
+                self.assertEqual(advice["status"], "GENERATED_REQUIRES_HUMAN_REVIEW")
+                self.assertEqual(advice["llama_runtime"], "NOT_RECORDED")
+                service.advice_queue.close()
 
     def test_finished_request_without_report_does_not_block_retry(self):
         service = self.service()

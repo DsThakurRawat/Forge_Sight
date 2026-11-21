@@ -19,6 +19,10 @@ def advice_for(record, root):
         if path.stat().st_size > 1024 * 1024:
             raise ValueError("Oversized advice report")
         report = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(report, dict):
+            # A syntactically valid non-object report is not evidence of a
+            # finished advisory; fail closed instead of raising.
+            raise ValueError("Advice report is not a JSON object")
         if (report.get("inspection_id") != record["inspection_id"]
                 or report.get("inspection_sha256") != canonical_hash(record)
                 or report.get("decision_sha256") != canonical_hash(record["decision"])
