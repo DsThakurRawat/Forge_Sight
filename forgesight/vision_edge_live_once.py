@@ -17,7 +17,8 @@ from PIL import Image, ImageDraw
 from forgesight.grade import grade_record, validate_policy
 from forgesight.regions import response_regions
 from forgesight.storage import InspectionStore
-from forgesight.vision_edge_worker import request as worker_request
+from forgesight.vision_edge_worker import (
+    WORKER_REQUEST_TIMEOUT_SECONDS, request as worker_request)
 
 
 MODEL_SHA256 = "8766c41a51a5444f57f564134427bbd2d2d95dd6ec5ff08b24698f00f7f55dcd"
@@ -42,9 +43,13 @@ def preprocess_inprocess(image_path, tensor_path):
         np.save(stream, tensor, allow_pickle=False)
 
 
+CHILD_TIMEOUT_SECONDS = 180
+
+
 def child(argv):
     started = time.perf_counter()
-    result = subprocess.run(argv, capture_output=True, text=True, timeout=180)
+    result = subprocess.run(argv, capture_output=True, text=True,
+                            timeout=CHILD_TIMEOUT_SECONDS)
     if result.returncode:
         raise RuntimeError(result.stderr[-2000:] or result.stdout[-2000:])
     return (time.perf_counter() - started) * 1000

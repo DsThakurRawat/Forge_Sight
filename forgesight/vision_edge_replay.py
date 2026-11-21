@@ -17,7 +17,8 @@ from PIL import Image, ImageDraw
 from forgesight.grade import grade_record, validate_policy
 from forgesight.regions import response_regions
 from forgesight.storage import InspectionStore
-from forgesight.vision_edge_worker import request as worker_request
+from forgesight.vision_edge_worker import (
+    WORKER_REQUEST_TIMEOUT_SECONDS, request as worker_request)
 
 
 def sha256(path):
@@ -28,9 +29,13 @@ def sha256(path):
     return digest.hexdigest()
 
 
+CHILD_TIMEOUT_SECONDS = 180
+
+
 def run_child(argv):
     started = time.perf_counter()
-    child = subprocess.run(argv, capture_output=True, text=True, timeout=180)
+    child = subprocess.run(argv, capture_output=True, text=True,
+                           timeout=CHILD_TIMEOUT_SECONDS)
     if child.returncode:
         raise RuntimeError("Child command failed: " + child.stderr[-2000:])
     return (time.perf_counter() - started) * 1000
