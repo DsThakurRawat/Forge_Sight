@@ -18,8 +18,11 @@ from PIL import Image
 
 from forgesight.assist_display import advice_for
 from forgesight.assist_queue import AdvisoryQueue
+from forgesight.operation_log import configure_operation_log, operation_logger
 from forgesight.storage import InspectionStore, new_correction
 from forgesight.vision_edge_live_once import MODEL_SHA256, sha256
+
+_log = operation_logger()
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -284,6 +287,8 @@ class LiveService:
         if (record.get("timings") or {}).get("vision_mode") == "COLD_PROCESS_AFTER_WORKER_UNAVAILABLE":
             # The worker died (idle timeout or crash). Bring it back so the next
             # inspection is warm instead of silently running cold forever.
+            _log.warning("Inspection %s ran cold after the vision worker became unavailable; respawning.",
+                         record.get("inspection_id"))
             self._respawn_vision_worker()
 
     def _respawn_advice_worker(self):
@@ -304,9 +309,10 @@ class LiveService:
                 if self.llama_ready:
                     self.advice_worker = launch_advice_worker(self.args)
                     self.advice_worker_boot_error = None
+                    _log.info("Advisory worker respawned.")
             except Exception:
                 # Next request cold-falls-back again and retries the respawn.
-                pass
+                _log.exception("Advisory worker respawn failed; requests cold-fall back and retry.")
             finally:
                 with self.advice_worker_respawn_lock:
                     self.advice_worker_respawning = False
@@ -329,9 +335,10 @@ class LiveService:
                     except subprocess.TimeoutExpired:
                         old.kill()
                 self.vision_worker = launch_vision_worker(self.args)
+                _log.info("Vision worker respawned.")
             except Exception:
                 # Next inspection cold-falls-back again and retries the respawn.
-                pass
+                _log.exception("Vision worker respawn failed; inspections cold-fall back and retry.")
             finally:
                 with self.worker_respawn_lock:
                     self.worker_respawning = False
@@ -492,8 +499,13 @@ class LiveService:
                 command, capture_output=True, text=True,
                 timeout=self.args.llama_timeout_seconds + 45))
             if future is None:
+                _log.warning("Advice request for inspection %s could not be queued (busy).",
+                             record["inspection_id"])
                 return "BUSY"
             self.advice_futures[record["inspection_id"]] = future
+            _log.info("Advice request for inspection %s submitted (worker=%s).",
+                      record["inspection_id"],
+                      self.advice_worker is not None and self.advice_worker.poll() is None)
             return "PENDING"
 
     def state(self):
@@ -700,6 +712,7 @@ class LiveService:
 
     def _publish_result(self, part_id, result_root, image, result):
         record_path = result_root / "record.json"
+        record = None
         if record_path.is_file():
             record = json.loads(record_path.read_text())
             if self.store.get_inspection(record["inspection_id"]) != record:
@@ -729,6 +742,13 @@ class LiveService:
             self.latest_root = result_root
             self.latest_source = image
             self.latest = latest
+        if record is not None:
+            _log.info("Inspection %s (%s) finished: status=%s grade=%s vision_mode=%s",
+                      record["inspection_id"], part_id, latest.get("status"),
+                      latest.get("grade"), record.get("timings", {}).get("vision_mode"))
+        else:
+            _log.error("Inspection for part %s failed before a record was confirmed: %s",
+                       part_id, latest.get("error"))
 
     def inspect(self, part_id, confirmed, source_kind):
         if (not isinstance(part_id, str) or not PART_ID.fullmatch(part_id)
@@ -946,6 +966,7 @@ def main():
         parser.error("Use a vision worker idle timeout of at least 60 seconds")
     args.database = args.database.resolve()
     args.runs_root = args.runs_root.resolve()
+    configure_operation_log(args.runs_root / "logs")
     args.vision_python = vision_executable(args.vision_python)
     args.model = args.model.resolve()
     args.grade_policy = args.grade_policy.resolve()
