@@ -20,7 +20,16 @@ from forgesight.assist_display import advice_for
 from forgesight.assist_queue import AdvisoryQueue
 from forgesight.operation_log import configure_operation_log, operation_logger, scrub
 from forgesight.storage import InspectionStore, new_correction
-from forgesight.vision_edge_live_once import MODEL_SHA256, sha256
+from forgesight.vision_edge_live_once import (
+    CHILD_TIMEOUT_SECONDS, MODEL_SHA256, WORKER_REQUEST_TIMEOUT_SECONDS, sha256)
+
+# The worst legitimate inline/replay path is a worker request that hangs to
+# its full client budget, then a cold fallback child with its own full
+# budget, plus preprocess/hash/grade overhead. The outer subprocess timeout
+# must exceed that sum or it kills the cold retry mid-run, leaving a
+# partial run directory and no record.
+VISION_OUTER_TIMEOUT_SECONDS = (WORKER_REQUEST_TIMEOUT_SECONDS
+                                + CHILD_TIMEOUT_SECONDS + 60)
 
 _log = operation_logger()
 
@@ -732,7 +741,7 @@ class LiveService:
                        "--mvtec-benchmark-upload" if benchmark else "--uploaded-image-diagnostic"]
             if self.args.vision_worker_socket is not None:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=VISION_OUTER_TIMEOUT_SECONDS)
             self._publish_result(upload_id, root / "result", image, result)
         except Exception as error:
             with self.lock:
@@ -759,7 +768,7 @@ class LiveService:
                        "--output-dir", str(root / "result")]
             if self.args.vision_worker_socket is not None:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=VISION_OUTER_TIMEOUT_SECONDS)
             self._publish_result(replay_id, root / "result", image, result)
             record_path = root / "result" / "record.json"
             if record_path.is_file():
@@ -861,7 +870,7 @@ class LiveService:
                        "--operator-declared-part" if source_kind == "physical_nut" else "--screen-photo-diagnostic"]
             if self.args.vision_worker_socket is not None:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=VISION_OUTER_TIMEOUT_SECONDS)
             self._publish_result(part_id, root / "result", image, result)
         except Exception as error:
             with self.lock:
