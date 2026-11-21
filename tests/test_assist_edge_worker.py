@@ -54,6 +54,20 @@ class StandInRuntime:
                       "generated_tokens": tokens}
 
 
+class DecodeCountRuntime(StandInRuntime):
+    """Follows the real runner's counting contract: prefill emits the first
+    token and stats["generated_tokens"] counts only the max_new_tokens - 1
+    decode steps (so a 1-token request reports 0)."""
+
+    def generate(self, formatted, max_new_tokens):
+        self.events.append("generate")
+        self.generate_calls += 1
+        self.seen_prompts.append(formatted)
+        decoded = max(0, min(5, max_new_tokens - 1))
+        return "note", {"prompt_tokens": len(formatted.split()),
+                        "generated_tokens": decoded}
+
+
 class WorkerTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -570,11 +584,48 @@ class WarmupTests(unittest.TestCase):
         evidence = aew.warm_worker(self.worker)
         self.assertEqual(self.runtime.generate_calls, 1)
         # The warmup goes through handle(): runner state was reset first, and
-        # the one-token bound reached the runtime.
+        # the two-token warmup bound reached the runtime.
         self.assertEqual(self.runtime.events, ["reset", "generate"])
-        self.assertEqual(evidence["warmup_generated_tokens"], 1)
+        self.assertGreaterEqual(evidence["warmup_generated_tokens"], 1)
         self.assertGreaterEqual(evidence["warmup_generate_ms"], 0.0)
         self.assertGreater(evidence["warmup_prompt_tokens"], 0)
+
+    def test_warmup_passes_under_the_real_decode_count_contract(self):
+        # Red before the fix: a 1-token warmup reports 0 decoded tokens on the
+        # real runner and the strict check rejected it, so READY never came.
+        worker = aew.Worker(DecodeCountRuntime(self.artifact))
+        evidence = aew.warm_worker(worker)
+        self.assertEqual(evidence["warmup_generated_tokens"], 1)
+
+    def test_warmup_bound_stays_inside_the_exported_context(self):
+        prompt = aew.chat_prompt(aew.WARMUP_REQUEST["prompt_text"],
+                                 aew.WARMUP_REQUEST["system_text"])
+        tokens = self.runtime.token_count(prompt)
+        self.assertGreaterEqual(aew.WARMUP_REQUEST["max_new_tokens"], 2)
+        self.assertLessEqual(aew.WARMUP_REQUEST["max_new_tokens"], aew.MAX_NEW_TOKENS)
+        self.assertLess(tokens, PROFILE["max_seq_length"])
+        self.assertLessEqual(tokens + aew.WARMUP_REQUEST["max_new_tokens"],
+                             PROFILE["max_context_length"])
+
+    def test_warmup_rejected_before_runtime_when_only_one_slot_fits(self):
+        # The runner can clamp the budget to the remaining context. The guard
+        # must refuse before generating, not rely on the native clamp.
+        runtime = DecodeCountRuntime(self.artifact)
+        prompt = aew.chat_prompt(aew.WARMUP_REQUEST["prompt_text"],
+                                 aew.WARMUP_REQUEST["system_text"])
+        runtime.profile = {"max_seq_length": 512,
+                           "max_context_length": runtime.token_count(prompt) + 1}
+        worker = aew.Worker(runtime)
+        with self.assertRaisesRegex(ValueError, "exceeds the exported context"):
+            aew.warm_worker(worker)
+        self.assertEqual(runtime.generate_calls, 0)
+
+    def test_zero_decoded_tokens_still_fails_closed(self):
+        # Strictness is unchanged: a runner that reports no generated tokens
+        # (for example a stand-in that stops at prefill) never reports READY.
+        worker = aew.Worker(DecodeCountRuntime(self.artifact))
+        with self.assertRaisesRegex(ValueError, "token statistics"):
+            worker.handle({"prompt_text": "x", "max_new_tokens": 1})
 
     def test_first_served_request_after_warmup_is_fresh(self):
         aew.warm_worker(self.worker)
