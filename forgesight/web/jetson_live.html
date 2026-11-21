@@ -21,8 +21,8 @@
       <section class="panel camera-panel" aria-labelledby="camera-title">
         <div class="panel-head"><div><h2 id="camera-title">Camera preview</h2><p id="camera-detail">Waiting for a camera frame</p></div><span id="camera-status" class="status connecting" role="status">CONNECTING</span></div>
         <div class="image-shell"><img id="preview" alt="Live camera view; not the saved inspection" hidden><div id="preview-empty" class="empty">Connecting to the camera…</div></div>
-        <div class="camera-toolbar"><div class="button-group" aria-label="Camera controls"><button type="button" class="secondary" disabled aria-describedby="camera-control-help">Start Camera</button><button type="button" class="secondary" disabled aria-describedby="camera-control-help">Stop Camera</button></div><span class="subtle">Automatic camera service</span></div>
-        <p id="camera-control-help" class="help">Camera starts with the station. Start / stop is unavailable in this version; the backend has no camera control API.</p>
+        <div class="camera-toolbar"><div class="button-group" aria-label="Camera controls"><button id="camera-start" type="button" class="secondary" aria-describedby="camera-control-help">Start Camera</button><button id="camera-stop" type="button" class="secondary" aria-describedby="camera-control-help">Stop Camera</button></div><span class="subtle">USB camera controls</span></div>
+        <p id="camera-control-help" class="help">Start opens the USB camera; Stop releases it. The last saved inspection and its result remain available.</p>
       </section>
       <section class="panel overlay-panel" aria-labelledby="evidence-title">
         <div class="panel-head"><div><h2 id="evidence-title">Anomaly response</h2><p id="evidence-caption">Latest saved inspection · EfficientAD</p></div><div class="view-switch" role="group" aria-label="Saved image view"><button id="show-overlay" class="view-button" type="button" aria-pressed="true">Response map</button><button id="show-source" class="view-button" type="button" aria-pressed="false">Original</button></div></div>

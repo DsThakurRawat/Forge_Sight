@@ -44,9 +44,15 @@ def main():
             expect(page.locator('#camera-status')).to_have_text('LIVE', timeout=10000)
             expect(page.locator('#preview')).to_be_visible()
             report['preview_size'] = page.locator('#preview').evaluate('(img) => [img.naturalWidth, img.naturalHeight]')
-        expect(page.get_by_role('button', name='Start Camera', exact=True)).to_be_disabled()
-        expect(page.get_by_role('button', name='Stop Camera', exact=True)).to_be_disabled()
-        report['camera_control_limit_visible'] = page.locator('#camera-control-help').is_visible()
+        camera_running = state['camera'].get('running', True)
+        if camera_running:
+            expect(page.get_by_role('button', name='Start Camera', exact=True)).to_be_disabled()
+            expect(page.get_by_role('button', name='Stop Camera', exact=True)).to_be_enabled()
+        else:
+            expect(page.get_by_role('button', name='Start Camera', exact=True)).to_be_enabled()
+            expect(page.get_by_role('button', name='Stop Camera', exact=True)).to_be_disabled()
+        report['camera_controls_visible'] = page.locator('#camera-control-help').is_visible()
+        report['camera_running_from_api'] = camera_running
 
         if args.png:
             page.locator('#diagnostic-file').set_input_files(str(args.png))
@@ -121,7 +127,8 @@ def main():
         # Only this browser sees the intercepted outage; the Jetson keeps running.
         page.route('**/api/state', lambda route: route.abort())
         expect(page.locator('#connection-status')).to_have_text('Station disconnected', timeout=10000)
-        for control in ['inspect', 'diagnostic-submit', 'review-submit', 'advice-request']:
+        for control in ['inspect', 'diagnostic-submit', 'review-submit', 'advice-request',
+                        'camera-start', 'camera-stop']:
             expect(page.locator('#' + control)).to_be_disabled()
         expect(page.locator('#preview')).to_be_hidden()
         expect(page.locator('#connection-error')).to_be_visible()
