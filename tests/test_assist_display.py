@@ -67,6 +67,7 @@ class AdviceDisplayTests(unittest.TestCase):
         shown = advice_for(self.record, self.root)
         self.assertEqual(shown['status'], 'GENERATED_REQUIRES_HUMAN_REVIEW')
         self.assertEqual(shown['advisory']['note'], '[E1] Fixture note [G1]')
+        self.assertEqual(shown['llama_runtime_mode'], 'PERSISTENT_WORKER')
 
     def test_unknown_native_status_withheld(self):
         report = deepcopy(self.report)
@@ -85,6 +86,12 @@ class AdviceDisplayTests(unittest.TestCase):
                 self.assertIsNone(result['advisory'])
         (self.folder / 'advice_report.json').write_text('{invalid')
         self.assertEqual(advice_for(self.record, self.root)['status'], 'ADVICE_UNAVAILABLE')
+        for non_object in ('[]', 'null', '"text"', '42'):
+            with self.subTest(report=non_object):
+                (self.folder / 'advice_report.json').write_text(non_object)
+                result = advice_for(self.record, self.root)
+                self.assertEqual(result['status'], 'ADVICE_UNAVAILABLE')
+                self.assertIsNone(result['advisory'])
         report = deepcopy(self.report)
         report['advisory']['response']['generated_note'] = 'Unsupported advice without citations'
         self.write_report(report)
