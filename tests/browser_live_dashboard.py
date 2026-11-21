@@ -70,7 +70,9 @@ class DashboardBrowserTests(unittest.TestCase):
             route.fulfill(content_type='application/json', body=json.dumps(self.state))
         elif path in self.bad_media:
             route.fulfill(status=404, body='Missing test image')
-        elif path in ('/api/frame.jpg', '/api/overlay.png', '/api/source.png'):
+        elif path == '/api/frame.jpg' or (
+                path.startswith('/api/inspection/')
+                and path.rsplit('/', 1)[-1] in ('source.png', 'overlay.png')):
             route.fulfill(content_type='image/png', body=PIXEL)
         else:
             route.fulfill(status=404)
@@ -178,7 +180,7 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(self.page.locator('#grade')).to_have_text('REJECT')
 
     def test_image_failure_has_placeholder_and_retains_grade(self):
-        self.bad_media.add('/api/overlay.png')
+        self.bad_media.add('/api/inspection/fixture-new/overlay.png')
         self.state['latest']['inspection_id'] = 'fixture-new'
         self.refresh()
         expect(self.page.locator('#overlay-empty')).to_contain_text('could not load')

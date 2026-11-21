@@ -36,8 +36,8 @@ class StubService:
                 "replay_samples": ["test/bent/017.png"],
                 "local_replay_samples": ["test/bent/017.png"]}
 
-    def image(self, name):
-        return None
+    def inspection_image(self, inspection_id, name):
+        return 404, None
 
     def inspect(self, part_id, confirmed, source_kind):
         if confirmed is not True:
@@ -221,6 +221,91 @@ class ManualReviewStoreTests(unittest.TestCase):
                 service.manual_review("stale-id", "Operator-1", "visible_issue", "Checked image")
             with self.assertRaises(ValueError):
                 service.manual_review(original["inspection_id"], "Operator-1", "fabricated", "Checked image")
+
+
+class MediaBindingTests(unittest.TestCase):
+    """Evidence is served by inspection ID from the stored record, with digests."""
+
+    def setUp(self):
+        self.folder = TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+        self.runs = self.root / "runs"
+        self.runs.mkdir()
+        self.store = InspectionStore(self.root / "inspections.sqlite3")
+        records = json.loads(
+            Path("manifests/graded_inspection_replay_v1.json").read_text())["records"]
+        self.ids = []
+        for index, tag in ((0, "a"), (1, "b")):
+            record = json.loads(json.dumps(records[index]))
+            folder = self.runs / tag
+            folder.mkdir()
+            overlay = folder / "response_overlay.png"
+            overlay.write_bytes(tag.encode() * 100)
+            source = folder / "source.png"
+            source.write_bytes(("source-" + tag).encode() * 100)
+            record["artifacts"]["response_overlay"] = str(overlay)
+            record["artifacts"]["response_overlay_sha256"] = hashlib.sha256(
+                overlay.read_bytes()).hexdigest()
+            record["source"]["path"] = str(source)
+            record["source"]["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+            self.store.save_inspection(record)
+            self.ids.append(record["inspection_id"])
+        service = LiveService.__new__(LiveService)
+        service.store = self.store
+        service.args = SimpleNamespace(runs_root=self.runs)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(service))
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = "http://127.0.0.1:%d" % self.server.server_port
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+    def get(self, path):
+        try:
+            response = urlopen(self.base + path)
+            return response.status, response.read()
+        except HTTPError as error:
+            return error.code, error.read()
+
+    def test_media_is_bound_to_the_requested_inspection(self):
+        for index, tag in ((0, "a"), (1, "b")):
+            status, body = self.get(f"/api/inspection/{self.ids[index]}/overlay.png?t=1")
+            self.assertEqual((status, body), (200, tag.encode() * 100))
+            status, body = self.get(f"/api/inspection/{self.ids[index]}/source.png")
+            self.assertEqual((status, body), (200, ("source-" + tag).encode() * 100))
+
+    def test_changed_evidence_is_refused_not_served(self):
+        overlay = self.runs / "a" / "response_overlay.png"
+        overlay.write_bytes(b"tampered")
+        status, body = self.get(f"/api/inspection/{self.ids[0]}/overlay.png")
+        self.assertEqual(status, 409)
+        self.assertIn(b"changed", body)
+        # The other inspection's untouched evidence still serves.
+        status, _ = self.get(f"/api/inspection/{self.ids[1]}/overlay.png")
+        self.assertEqual(status, 200)
+
+    def test_unknown_malformed_and_out_of_root_references_are_not_found(self):
+        status, _ = self.get("/api/inspection/00000000-0000-0000-0000-000000000000/source.png")
+        self.assertEqual(status, 404)
+        status, _ = self.get("/api/inspection/not-a-uuid/source.png")
+        self.assertEqual(status, 404)
+        status, _ = self.get("/api/overlay.png")
+        self.assertEqual(status, 404)
+        record = json.loads(json.dumps(
+            self.store.get_inspection(self.ids[0])))
+        record["inspection_id"] = "11111111-1111-1111-1111-111111111111"
+        record["part_id"] = "ESCAPE-001"
+        outside = self.root / "outside.png"
+        outside.write_bytes(b"outside")
+        record["source"]["path"] = str(outside)
+        record["source"]["sha256"] = hashlib.sha256(b"outside").hexdigest()
+        self.store.save_inspection(record)
+        status, _ = self.get(f"/api/inspection/{record['inspection_id']}/source.png")
+        self.assertEqual(status, 404)
 
 
 class ReplayIntakeTests(unittest.TestCase):
