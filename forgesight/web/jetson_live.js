@@ -292,10 +292,13 @@ function renderLatest(item, processing) {
   if (item.status === 'ANALYZED') {
     mediaAvailable = true;
     byId('evidence-caption').textContent = 'Saved image · ' + item.part_id;
+    // Bound to this inspection's stored record, so a newer inspection can
+    // never replace the evidence under a result already being viewed.
+    const media = '/api/inspection/' + encodeURIComponent(item.inspection_id);
     const stamp = '?t=' + Date.now();
-    overlay.src = '/api/overlay.png' + stamp;
-    byId('source-image').src = '/api/source.png' + stamp;
-    byId('source-link').href = '/api/source.png' + stamp;
+    overlay.src = media + '/overlay.png' + stamp;
+    byId('source-image').src = media + '/source.png' + stamp;
+    byId('source-link').href = media + '/source.png' + stamp;
     selectView(savedView);
   }
 }
