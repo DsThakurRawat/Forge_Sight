@@ -246,6 +246,7 @@ class LiveService:
         self.advice_worker_boot_error = None
         self.advice_worker_respawning = False
         self.advice_worker_respawn_lock = Lock()
+        self.advice_recovered = set()  # inspection ids whose wedge recovery already ran
         if self.llama_ready and getattr(args, "llama_worker_socket", None) is not None:
             try:
                 self.advice_worker = launch_advice_worker(args)
@@ -370,6 +371,8 @@ class LiveService:
             return {"status": "ADVICE_UNAVAILABLE", "advisory": None}
         record = json.loads(record_path.read_text())
         advice = advice_for(record, self.advice_root)
+        if future is not None and future.done():
+            self._recover_finished_advice(latest["inspection_id"], future)
         if future is not None and not future.done():
             return {"status": "PENDING", "advisory": None, **mode}
         if future is not None and advice["status"] in ("NOT_REQUESTED", "PENDING"):
@@ -377,6 +380,31 @@ class LiveService:
         if isinstance(advice, dict):
             advice = {**advice, **mode}
         return advice
+
+    def _recover_finished_advice(self, inspection_id, future):
+        """One bounded recovery action per finished advisory request.
+
+        When the controller flagged the persistent worker as wedged (alive
+        but no longer answering), replace it so the next request is warm
+        again. Best-effort: the report file on disk stays authoritative.
+        """
+        recovered = getattr(self, "advice_recovered", None)
+        if recovered is None:
+            recovered = self.advice_recovered = set()
+        if len(recovered) >= 64:
+            # Bounded state: only the latest inspection's finished future is
+            # ever consulted, so old ids carry no information.
+            recovered.clear()
+        if inspection_id in recovered:
+            return
+        recovered.add(inspection_id)
+        try:
+            result = future.result()
+            summary = json.loads(result.stdout) if result is not None and result.stdout else {}
+        except Exception:
+            return  # a killed or crashed replay carries no summary; nothing to learn
+        if isinstance(summary, dict) and summary.get("persistent_worker_unhealthy"):
+            self._respawn_advice_worker()
 
     def request_advice(self):
         with self.lock:
@@ -395,14 +423,35 @@ class LiveService:
                     or self.store.get_inspection(record["inspection_id"]) != record):
                 raise ValueError("Inspection record does not match SQLite")
             output = self.advice_root / record["inspection_id"]
-            if output.exists() or record["inspection_id"] in self.advice_futures:
+            pending = self.advice_futures.get(record["inspection_id"])
+            if pending is not None and not pending.done():
                 return "ALREADY_REQUESTED"
+            if output.exists():
+                if (output / "advice_report.json").is_file():
+                    return "ALREADY_REQUESTED"
+                # An earlier attempt died before publishing its report (outer
+                # kill, crash, strict-JSON failure). Its files are incomplete
+                # and must not masquerade as a finished advisory, but they
+                # must not block a fresh request either: quarantine them
+                # aside, never delete. The suffix is unique per quarantine so
+                # repeated retries within one second cannot collide; a
+                # symlinked output moves the link itself, never its target.
+                quarantine = output.with_name(
+                    output.name + ".incomplete-"
+                    + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+                    + "-" + uuid4().hex[:8])
+                os.replace(output, quarantine)
             command = [sys.executable, "-B", "-m", "forgesight.assist_jetson_replay_once",
                        "--record", str(record_path), "--database", str(self.args.database),
                        "--guidance", str(self.args.guidance),
                        "--llama-root", str(self.args.llama_root),
                        "--output-dir", str(output), "--llama-timeout-seconds",
-                       str(self.args.llama_timeout_seconds)]
+                       str(self.args.llama_timeout_seconds),
+                       # Absolute deadline on the same clock the outer kill
+                       # uses, computed at spawn time: interpreter and import
+                       # time count against the shared budget too.
+                       "--request-deadline-monotonic",
+                       str(time.monotonic() + self.args.llama_timeout_seconds + 45)]
             if getattr(self.args, "llama_worker_socket", None) is not None:
                 if self.advice_worker is not None and self.advice_worker.poll() is None:
                     command += ["--llama-worker-socket", str(self.args.llama_worker_socket)]

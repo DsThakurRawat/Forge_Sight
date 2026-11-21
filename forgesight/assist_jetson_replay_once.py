@@ -4,6 +4,8 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -21,6 +23,36 @@ def sha256(path):
     return digest.hexdigest()
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+# Shared-request-deadline accounting: the caller (the live UI) kills this whole
+# process at the absolute --request-deadline-monotonic instant it passes at
+# spawn. Generation attempts are capped so the final report write still fits
+# inside that kill; starting a generation that cannot finish would only leave
+# another half-written output.
+REPORT_WRITE_RESERVE_SECONDS = 5
+MIN_VIABLE_GENERATION_SECONDS = 5
+
+
+def _reject_non_finite(value):
+    """json.loads parse_constant hook: NaN/Infinity in native output is not
+    evidence. Python's json accepts them by default; reject them so they can
+    never reach the strict report write (allow_nan=False) or the advisory."""
+    raise ValueError(f"Non-finite number in native output: {value}")
+
+
+def _generation_budget(deadline, cap):
+    """Seconds one generation attempt may take within the shared deadline.
+
+    Returns None when the remaining budget cannot fit even a bounded attempt:
+    the caller then records the skip honestly instead of starting a run the
+    outer kill would terminate mid-write.
+    """
+    if deadline is None:
+        return cap
+    remaining = deadline - time.monotonic() - REPORT_WRITE_RESERVE_SECONDS
+    if remaining < MIN_VIABLE_GENERATION_SECONDS:
+        return None
+    return min(cap, remaining)
 
 
 def _valid_sha256(value):
@@ -76,20 +108,49 @@ def _pinned_asset_hashes(llama_root):
     return {artifact}, {tokenizer}
 
 
-def _generate_via_worker(args, context, root, report, source_mode):
+def _cold_fallback_within_budget(args, context, root, report, source_mode, deadline, mode):
+    """Run the trusted cold path, bounded by the shared request deadline.
+
+    A fresh full cold budget after a late worker failure can overrun the
+    caller's outer kill, leaving no report and an output dir that blocks
+    retry. The fallback therefore gets only the remaining budget; when that
+    cannot fit a verified cold generation, the skip is recorded instead.
+    """
+    if deadline is None:
+        # No shared deadline supplied: legacy full-budget fallback, unchanged.
+        _generate_via_subprocess(args, context, root, report, source_mode)
+        report["llama_runtime_mode"] = mode
+        return
+    timeout = _generation_budget(deadline, args.llama_timeout_seconds + 30)
+    if timeout is None:
+        report["runtime_error"] = ("Cold fallback skipped: the remaining request "
+                                   "budget cannot fit a verified cold generation.")
+        report["cold_fallback_skipped"] = "SHARED_REQUEST_DEADLINE"
+        return
+    _generate_via_subprocess(args, context, root, report, source_mode,
+                             timeout_seconds=timeout)
+    report["llama_runtime_mode"] = mode
+
+
+def _generate_via_worker(args, context, root, report, source_mode, deadline=None):
     """Warm path: reuse the verified persistent worker; no process spawn or
     model reload per advisory. parse_advisory and the immutability re-check
     in main() are unchanged."""
     from forgesight.assist_edge_worker import request as worker_request
     report["llama_runtime_mode"] = "PERSISTENT_WORKER"
     started = time.perf_counter()
+    timeout = _generation_budget(deadline, args.llama_timeout_seconds + 30)
+    if timeout is None:
+        report["runtime_error"] = ("The remaining request budget cannot fit "
+                                   "the advisory generation.")
+        return
     try:
         report["runtime_requested"] = True
         native = worker_request(args.llama_worker_socket,
                                 {"prompt_text": context["prompt_text"],
                                  "system_text": context["system_text"],
                                  "max_new_tokens": 64},
-                                timeout_seconds=args.llama_timeout_seconds + 30)
+                                timeout_seconds=timeout)
         report["controller_runtime_wall_ms"] = (time.perf_counter() - started) * 1000
         evidence = native.get("runtime_evidence") or {}
         # Attestation gate: only a response carrying the worker's verified
@@ -138,15 +199,29 @@ def _generate_via_worker(args, context, root, report, source_mode):
         # A worker-reported ERROR (validation or artifact change) above is a
         # hard failure and never falls back.
         report["persistent_worker_transport_error"] = type(error).__name__ + ": " + str(error)
-        _generate_via_subprocess(args, context, root, report, source_mode)
-        report["llama_runtime_mode"] = "PERSISTENT_WORKER_UNREACHABLE_COLD_FALLBACK"
+        _cold_fallback_within_budget(args, context, root, report, source_mode, deadline,
+                                     "PERSISTENT_WORKER_UNREACHABLE_COLD_FALLBACK")
+    except TimeoutError as error:
+        # The worker accepted the connection but stopped answering: it is
+        # alive (the UI's poll() never respawns it) yet wedged inside
+        # generation. Treat it like a transport failure - cold-fall-back
+        # within the remaining shared budget - and flag the wedge so the UI
+        # replaces the worker instead of leaving advice stuck until restart.
+        report["persistent_worker_transport_error"] = type(error).__name__ + ": " + str(error)
+        report["persistent_worker_unhealthy"] = True
+        _cold_fallback_within_budget(args, context, root, report, source_mode, deadline,
+                                     "PERSISTENT_WORKER_UNHEALTHY_COLD_FALLBACK")
     except (OSError, RuntimeError) as error:
         report["runtime_error"] = type(error).__name__ + ": " + str(error)
 
 
-def _generate_via_subprocess(args, context, root, report, source_mode):
-    """Cold path: one fresh native process chain per advisory (unchanged)."""
+def _generate_via_subprocess(args, context, root, report, source_mode, timeout_seconds=None):
+    """Cold path: one fresh native process chain per advisory. timeout_seconds
+    defaults to the legacy full budget; the warm-path fallback passes the
+    remaining shared request budget instead."""
     report["llama_runtime_mode"] = "COLD_SUBPROCESS"
+    if timeout_seconds is None:
+        timeout_seconds = args.llama_timeout_seconds + 30
     llama = args.llama_root.resolve()
     model_dir = llama / "model"
     command = [str(llama / "venv/bin/python"), "-B", str(model_dir / "edge_jetson_smoke.py"),
@@ -162,35 +237,46 @@ def _generate_via_subprocess(args, context, root, report, source_mode):
     try:
         report["runtime_requested"] = True
         process = subprocess.run(command, capture_output=True, text=True,
-                                 timeout=args.llama_timeout_seconds + 30)
+                                 timeout=timeout_seconds)
         report["controller_runtime_wall_ms"] = (time.perf_counter() - started) * 1000
         native_path = root / "native/run.json"
         if process.returncode != 0 or not native_path.is_file():
             report["runtime_error"] = "ExecuTorch runner did not complete successfully."
         else:
-            native = json.loads(native_path.read_text())
-            worker = native.get("worker_result") or {}
-            report["native"] = {"run_sha256": sha256(native_path),
-                                "generated_sha256": sha256(root / "native/generated.txt"),
-                                "status": native["status"],
-                                "process_wall_seconds": native["process_wall_seconds"],
-                                "sampled_peak_child_rss_kib": native["sampled_peak_child_rss_kib"],
-                                "model_sha256": worker.get("artifact", {}).get("sha256"),
-                                "tokenizer_sha256": worker.get("tokenizer", {}).get("sha256"),
-                                "prompt_tokens": worker.get("prompt_token_count"),
-                                "generation_stats": worker.get("stats")}
-            if native["status"] != "JETSON_EXECUTORCH_LLAMA_GENERATION_VERIFIED":
-                report["runtime_error"] = "ExecuTorch generation was not verified."
+            try:
+                # parse_constant rejects NaN/Infinity: a non-finite number is
+                # not evidence, and it must never reach the strict report
+                # write (allow_nan=False), where it used to raise mid-dump
+                # and leave a partial advice_report.json behind.
+                native = json.loads(native_path.read_text(),
+                                    parse_constant=_reject_non_finite)
+                worker = native.get("worker_result") or {}
+                report["native"] = {"run_sha256": sha256(native_path),
+                                    "generated_sha256": sha256(root / "native/generated.txt"),
+                                    "status": native["status"],
+                                    "process_wall_seconds": native["process_wall_seconds"],
+                                    "sampled_peak_child_rss_kib": native["sampled_peak_child_rss_kib"],
+                                    "model_sha256": worker.get("artifact", {}).get("sha256"),
+                                    "tokenizer_sha256": worker.get("tokenizer", {}).get("sha256"),
+                                    "prompt_tokens": worker.get("prompt_token_count"),
+                                    "generation_stats": worker.get("stats")}
+            except (ValueError, TypeError, KeyError) as error:
+                report["runtime_error"] = ("ExecuTorch native output was unreadable or "
+                                           "carried a non-finite number: "
+                                           + type(error).__name__)
             else:
-                try:
-                    advice = parse_advisory(worker["generated_text_display"], context)
-                    advice["jetson_verified"] = True
-                    advice["source_mode"] = source_mode
-                    report["advisory"] = advice
-                    report["status"] = "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"
-                    (root / "advisory.json").write_text(json.dumps(advice, indent=2) + "\n")
-                except (ValueError, TypeError, KeyError) as error:
-                    report["validation_error"] = str(error)
+                if native["status"] != "JETSON_EXECUTORCH_LLAMA_GENERATION_VERIFIED":
+                    report["runtime_error"] = "ExecuTorch generation was not verified."
+                else:
+                    try:
+                        advice = parse_advisory(worker["generated_text_display"], context)
+                        advice["jetson_verified"] = True
+                        advice["source_mode"] = source_mode
+                        report["advisory"] = advice
+                        report["status"] = "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"
+                        (root / "advisory.json").write_text(json.dumps(advice, indent=2) + "\n")
+                    except (ValueError, TypeError, KeyError) as error:
+                        report["validation_error"] = str(error)
     except (OSError, subprocess.TimeoutExpired) as error:
         report["runtime_error"] = type(error).__name__ + ": " + str(error)
 
@@ -204,9 +290,22 @@ def main():
     parser.add_argument("--llama-timeout-seconds", type=float, default=240)
     parser.add_argument("--llama-worker-socket", type=Path, default=None,
                         help="Persistent advisory worker socket; omit for the cold subprocess path")
+    parser.add_argument("--request-deadline-monotonic", type=float, default=None,
+                        help="Absolute time.monotonic() instant by which generation must finish "
+                             "so the final report write still fits before the caller's kill. "
+                             "The live UI passes its own outer deadline (llama timeout + 45 s "
+                             "from spawn); an absolute instant keeps interpreter and import "
+                             "time inside the shared budget, which an inner duration could not. "
+                             "Omit for the legacy per-attempt budgets.")
     args = parser.parse_args()
     if not 0 < args.llama_timeout_seconds <= 240:
         parser.error("Llama timeout must be greater than zero and at most 240 seconds.")
+    if args.request_deadline_monotonic is not None and (
+            not math.isfinite(args.request_deadline_monotonic)
+            or args.request_deadline_monotonic <= 0):
+        # A NaN or infinite deadline would silently disable the shared cap
+        # (NaN comparisons are false; min(cap, inf) is the legacy cap).
+        parser.error("Request deadline must be a finite, positive monotonic timestamp.")
     if args.output_dir.exists():
         parser.error("Choose a new advisory output directory.")
     if args.record.stat().st_size > 1024 * 1024:
@@ -226,8 +325,10 @@ def main():
     root = args.output_dir.resolve()
     root.mkdir(parents=True)
     (root / "input_inspection.json").write_bytes(original_bytes)
+    deadline = args.request_deadline_monotonic
     report = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
               "status": "ADVICE_UNAVAILABLE", "source_mode": source_mode,
+              "persistent_worker_unhealthy": False,
               "physical_part_inspected": False, "inspection_id": record["inspection_id"],
               "inspection_sha256": canonical_hash(record), "inspection_file_sha256": sha256(args.record),
               "authoritative_grade": record["decision"]["grade"],
@@ -247,18 +348,30 @@ def main():
         (root / "prompt.txt").write_text(context["prompt_text"], encoding="utf-8")
         (root / "system.txt").write_text(context["system_text"], encoding="utf-8")
         if args.llama_worker_socket is not None:
-            _generate_via_worker(args, context, root, report, source_mode)
+            _generate_via_worker(args, context, root, report, source_mode, deadline=deadline)
         else:
-            _generate_via_subprocess(args, context, root, report, source_mode)
+            timeout = _generation_budget(deadline, args.llama_timeout_seconds + 30)
+            if timeout is None:
+                report["runtime_error"] = ("The remaining request budget cannot fit "
+                                           "a verified cold generation.")
+            else:
+                _generate_via_subprocess(args, context, root, report, source_mode,
+                                         timeout_seconds=timeout)
     if (args.record.read_bytes() != original_bytes
             or InspectionStore(args.database, create=False).get_inspection(record["inspection_id"]) != record):
         raise RuntimeError("Original inspection changed while generating advice.")
     report["inspection_and_sqlite_unchanged"] = True
-    with (root / "advice_report.json").open("x") as stream:
-        json.dump(report, stream, indent=2, allow_nan=False)
-        stream.write("\n")
+    # Serialize fully before touching the filesystem, then publish
+    # atomically: a strict-JSON failure or an interrupted write must never
+    # leave a partial advice_report.json that advice_for would half-read.
+    payload = json.dumps(report, indent=2, allow_nan=False) + "\n"
+    temp_report = root / "advice_report.json.tmp"
+    with temp_report.open("x") as stream:
+        stream.write(payload)
+    os.replace(temp_report, root / "advice_report.json")
     print(json.dumps({key: report[key] for key in ("status", "authoritative_grade", "advisory",
-                                               "input_refusal", "runtime_error", "validation_error")}, indent=2))
+                                               "input_refusal", "runtime_error", "validation_error",
+                                               "persistent_worker_unhealthy")}, indent=2))
     if report["status"] != "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW":
         raise SystemExit(1)
 
