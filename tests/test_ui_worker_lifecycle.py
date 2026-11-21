@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -107,6 +108,10 @@ def bare_service():
 
 
 class RespawnTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
     def inspect_with_record(self, record):
         service = bare_service()
         service._publish_result = mock.Mock()
@@ -133,6 +138,45 @@ class RespawnTests(unittest.TestCase):
                        {"status": "ERROR", "timings": {}, "error": {"message": "x"}}):
             service = self.inspect_with_record(record)
             service._respawn_vision_worker.assert_not_called()
+
+    def replay_with_record(self, mode):
+        service = bare_service()
+        from threading import Lock
+        service.lock = Lock()
+        service.busy = True
+        service.args.dataset_manifest = Path("manifest")
+        service.args.vision_worker_socket = Path("/tmp/worker.sock")
+        root = Path(self._tmp.name) / ("replay-" + str(mode is not None))
+        result = root / "result"
+        result.mkdir(parents=True)
+        record = self.record(mode)
+        record["inspection_id"] = "00000000-0000-0000-0000-000000000000"
+        (result / "record.json").write_text(json.dumps(record))
+        service._publish_result = mock.Mock()
+        service._respawn_vision_worker = mock.Mock()
+        with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
+            service._run_replay("replay-t1", root / "image.png", {"sha256": "a" * 64}, root)
+        return service
+
+    def test_replay_cold_fallback_marker_triggers_respawn(self):
+        service = self.replay_with_record("COLD_PROCESS_AFTER_WORKER_UNAVAILABLE")
+        service._respawn_vision_worker.assert_called_once()
+
+    def test_replay_warm_and_missing_records_do_not_trigger_respawn(self):
+        service = self.replay_with_record(None)
+        service._respawn_vision_worker.assert_not_called()
+        service = bare_service()
+        from threading import Lock
+        service.lock = Lock()
+        service.busy = True
+        service._publish_result = mock.Mock()
+        service._respawn_vision_worker = mock.Mock()
+        root = Path(self._tmp.name) / "replay-no-record"
+        with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
+            service._run_replay("replay-t2", root / "image.png", {"sha256": "a" * 64}, root)
+        service._respawn_vision_worker.assert_not_called()
 
     def test_respawn_replaces_dead_worker(self):
         service = bare_service()

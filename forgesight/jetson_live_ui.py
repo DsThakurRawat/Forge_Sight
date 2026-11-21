@@ -278,7 +278,10 @@ class LiveService:
             returncode = 0 if record["status"] == "ANALYZED" else 1
             stdout = stderr = ""
         self._publish_result(part_id, root / "result", image, Done())
-        if record["timings"].get("vision_mode") == "COLD_PROCESS_AFTER_WORKER_UNAVAILABLE":
+        self._rewarm_after_cold_fallback(record)
+
+    def _rewarm_after_cold_fallback(self, record):
+        if (record.get("timings") or {}).get("vision_mode") == "COLD_PROCESS_AFTER_WORKER_UNAVAILABLE":
             # The worker died (idle timeout or crash). Bring it back so the next
             # inspection is warm instead of silently running cold forever.
             self._respawn_vision_worker()
@@ -629,6 +632,12 @@ class LiveService:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
             result = subprocess.run(command, capture_output=True, text=True, timeout=180)
             self._publish_result(replay_id, root / "result", image, result)
+            record_path = root / "result" / "record.json"
+            if record_path.is_file():
+                # Same cold-fallback recovery as inline inspections: a dead
+                # worker must be replaced after a replay too, or replay-only
+                # sessions run every later inspection on the slow cold path.
+                self._rewarm_after_cold_fallback(json.loads(record_path.read_text()))
         except Exception as error:
             with self.lock:
                 self.latest_root = root
