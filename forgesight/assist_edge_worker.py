@@ -56,6 +56,35 @@ MAX_SYSTEM_BYTES = 2048            # chat_prompt's own bound
 MAX_NEW_TOKENS = 64                # edge_jetson_smoke validate_budget bound
 
 
+# One bounded non-advisory generation at boot. The native runner loads the
+# model lazily on the FIRST generate call (the first real advisory paid a
+# measured ~2.9 s model load inside its 5.31 s on the Jetson), so a worker
+# that reports READY without generating still serves a slow first request.
+# The warmup absorbs that load plus first-call allocator/kernel setup before
+# READY. Its output is discarded, it writes nothing, and handle() resets
+# runner state before it - and before every later request - so nothing from
+# it can leak into an advisory (the warm-vs-cold acceptance gate still binds).
+WARMUP_REQUEST = {"prompt_text": "Runtime warmup.", "system_text": None,
+                  "max_new_tokens": 1}
+
+
+def warm_worker(worker):
+    """Run the bounded warmup through the normal request path; return evidence.
+
+    Uses handle() so artifact stat-checks, validation and the pre-generation
+    reset are exercised exactly as for a served request. A worker that cannot
+    generate raises here and never reports READY, leaving the controller on
+    its trusted cold path.
+    """
+    started = time.perf_counter()
+    report = worker.handle(dict(WARMUP_REQUEST))
+    return {"warmup_generate_ms": (time.perf_counter() - started) * 1000,
+            "warmup_prompt_tokens": report["prompt_token_count"],
+            "warmup_generated_tokens": report["stats"].get("generated_tokens"),
+            "warmup_scope": ("bounded one-token non-advisory generation at boot; "
+                             "absorbs lazy model load; output discarded")}
+
+
 def validate_request(request):
     if not isinstance(request, dict):
         raise ValueError("Expected a JSON request object.")
@@ -331,9 +360,12 @@ def main():
     if args.idle_timeout_seconds is not None and not 0 < args.idle_timeout_seconds <= 3600:
         parser.error("Idle timeout must be between 0 and 3600 seconds.")
     runtime = build_jetson_runtime(args.llama_root)
+    worker = Worker(runtime)
+    warmup = warm_worker(worker)
     print(json.dumps({"status": "WORKER_READY",
-                      "model_sha256": runtime.evidence["artifact"]["sha256"]}), flush=True)
-    serve(args.socket, Worker(runtime), args.idle_timeout_seconds,
+                      "model_sha256": runtime.evidence["artifact"]["sha256"],
+                      **warmup}), flush=True)
+    serve(args.socket, worker, args.idle_timeout_seconds,
           args.request_read_timeout_seconds)
 
 
