@@ -175,7 +175,12 @@ class CameraFeed:
     def __init__(self, index=0):
         self.index = index
         self.lock = Lock()
+        self.control_lock = Lock()
         self.stop = Event()
+        self.enabled = Event()
+        self.enabled.set()  # Existing behavior: camera starts with station
+        self.capture_released = Event()
+        self.capture_released.set()
         self.frame = None
         self.jpeg = None
         self.updated = 0.0
@@ -187,7 +192,41 @@ class CameraFeed:
 
     def close(self):
         self.stop.set()
+        self.enabled.set()  # Wake the capture loop for shutdown
         self.thread.join(timeout=3)
+
+    def turn_on(self):
+        with self.control_lock:
+            with self.lock:
+                if self.stop.is_set():
+                    raise RuntimeError("Camera service is shutting down")
+                if self.enabled.is_set():
+                    return
+            if not self.capture_released.wait(timeout=3):
+                raise RuntimeError("Timed out waiting for camera device release")
+            with self.lock:
+                if self.stop.is_set():
+                    raise RuntimeError("Camera service is shutting down")
+                if self.enabled.is_set():
+                    return
+                self.frame = None
+                self.jpeg = None
+                self.updated = 0.0
+                self.error = "Starting camera"
+                self.enabled.set()
+
+    def turn_off(self):
+        with self.control_lock:
+            with self.lock:
+                self.enabled.clear()
+                self.frame = None
+                self.jpeg = None
+                self.updated = 0.0
+                self.error = "Camera stopped by operator"
+            if not self.capture_released.wait(timeout=3):
+                with self.lock:
+                    self.error = "Timed out waiting for camera device release"
+                raise RuntimeError(self.error)
 
     def snapshot(self):
         with self.lock:
@@ -203,15 +242,23 @@ class CameraFeed:
 
     def state(self):
         with self.lock:
-            ready = self.jpeg is not None and time.monotonic() - self.updated <= 2
-            return {"ready": ready, "message": "Live C270 preview" if ready else self.error}
+            running = self.enabled.is_set() and not self.stop.is_set()
+            ready = running and self.jpeg is not None and time.monotonic() - self.updated <= 2
+            return {"ready": ready, "running": running,
+                    "message": "Live C270 preview" if ready else self.error}
 
     def _loop(self):
         import cv2
 
         while not self.stop.is_set():
-            capture = cv2.VideoCapture(self.index, cv2.CAP_V4L2)
+            if not self.enabled.wait(timeout=0.1) or self.stop.is_set():
+                continue
+            self.capture_released.clear()
+            capture = None
             try:
+                if not self.enabled.is_set() or self.stop.is_set():
+                    continue
+                capture = cv2.VideoCapture(self.index, cv2.CAP_V4L2)
                 if not capture.isOpened():
                     raise RuntimeError("Camera could not open; check /dev/video0 and USB connection")
                 capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
@@ -219,7 +266,7 @@ class CameraFeed:
                 capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 capture.set(cv2.CAP_PROP_FPS, 30)
                 next_encode = 0.0
-                while not self.stop.is_set():
+                while not self.stop.is_set() and self.enabled.is_set():
                     good, frame = capture.read()
                     if not good or frame is None or frame.shape != (480, 640, 3):
                         raise RuntimeError("Camera stopped delivering 640x480 color frames")
@@ -236,6 +283,8 @@ class CameraFeed:
                     if not good:
                         raise RuntimeError("Camera JPEG encoding failed")
                     with self.lock:
+                        if not self.enabled.is_set() or self.stop.is_set():
+                            continue
                         self.frame = frame.copy()
                         self.jpeg = encoded.tobytes()
                         self.updated = time.monotonic()
@@ -244,10 +293,17 @@ class CameraFeed:
                 with self.lock:
                     self.frame = None
                     self.jpeg = None
-                    self.error = str(error)
+                    if self.enabled.is_set() and not self.stop.is_set():
+                        self.error = str(error)
             finally:
-                capture.release()
-            self.stop.wait(1)
+                try:
+                    if capture is not None:
+                        capture.release()
+                finally:
+                    self.capture_released.set()
+            # Do not impose a 1-second restart delay after an intentional stop.
+            if self.enabled.is_set():
+                self.stop.wait(1)
 
 
 ADVICE_FUTURES_COMPLETED_KEPT = 32
@@ -1141,6 +1197,20 @@ def handler_for(service):
             if (not self.allowed_host() or self.headers.get("Origin") !=
                     "http://" + self.headers.get("Host", "")):
                 self.send(403, b"Forbidden", "text/plain")
+                return
+            if self.path in ("/api/camera/start", "/api/camera/stop"):
+                if self.headers.get("Content-Length", "0") != "0":
+                    self.send(400, b"Invalid camera control request", "text/plain")
+                    return
+                try:
+                    if self.path == "/api/camera/start":
+                        service.camera.turn_on()
+                    else:
+                        service.camera.turn_off()
+                except RuntimeError as error:
+                    self.send(503, str(error).encode(), "text/plain")
+                    return
+                self.send(200, json.dumps(service.camera.state()).encode(), "application/json")
                 return
             if self.path == "/api/advice":
                 if self.headers.get("Content-Length", "0") != "0":

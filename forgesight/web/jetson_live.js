@@ -17,6 +17,8 @@ let mediaAvailable = false;
 let historySignature = '';
 let reviewSignature = '';
 let cameraReady = false;
+let cameraRunning = false;
+let cameraControlPending = false;
 let busy = false;
 let currentLatest = null;
 const regionNote = byId('response-regions');
@@ -27,6 +29,8 @@ const validId = value => /^[A-Za-z0-9_-]{1,64}$/.test(value);
 
 function updateButton() {
   const locked = !connected || commandPending || busy;
+  byId('camera-start').disabled = locked || cameraControlPending || cameraRunning;
+  byId('camera-stop').disabled = locked || cameraControlPending || !cameraRunning;
   byId('inspect').disabled = locked || !cameraReady || preview.hidden ||
     !byId('confirmed').checked || !validId(byId('part-id').value);
   byId('diagnostic-submit').disabled = locked || !byId('diagnostic-file').files.length ||
@@ -89,7 +93,7 @@ function stopPreview() {
 }
 
 async function refreshState() {
-  if (refreshing || commandPending) return;
+  if (refreshing || commandPending || cameraControlPending) return;
   refreshing = true;
   const epoch = commandEpoch;
   try {
@@ -101,6 +105,7 @@ async function refreshState() {
     byId('connection-status').className = 'connection ready';
     byId('connection-error').hidden = true;
     cameraReady = !!state.camera.ready;
+    cameraRunning = state.camera.running !== false;
     busy = !!state.busy;
     if (currentLatest?.inspection_id !== state.latest?.inspection_id) {
       byId('review-outcome').value = '';
@@ -108,9 +113,11 @@ async function refreshState() {
     }
     currentLatest = state.latest;
     adviceState = state.advice;
-    if (!cameraReady) {
+    if (!cameraRunning) {
       stopPreview();
-      // Current API exposes ready/message, not a stopped state. Never infer STOPPED.
+      cameraStatus('STOPPED', state.camera.message || 'Camera stopped by operator.');
+    } else if (!cameraReady) {
+      stopPreview();
       const starting = state.camera.message === 'Starting camera';
       cameraStatus(starting ? 'CONNECTING' : 'ERROR', state.camera.message || 'Camera unavailable. Check the USB connection.');
     } else if (preview.hidden && !previewPending) {
@@ -134,6 +141,7 @@ async function refreshState() {
     if (epoch !== commandEpoch) return;
     connected = false;
     cameraReady = false;
+    cameraRunning = false;
     stopPreview();
     cameraStatus('ERROR', 'Camera status unavailable while the station is disconnected.');
     byId('connection-status').textContent = 'Station disconnected';
@@ -453,6 +461,32 @@ byId('review-form').addEventListener('submit', event => {
       byId('review-outcome').value = '';
     });
 });
+
+async function cameraControl(action) {
+  if (cameraControlPending || commandPending || busy || !connected) return;
+  cameraControlPending = true;
+  commandEpoch += 1;
+  updateButton();
+  try {
+    const state = await requestJSON('/api/camera/' + action, {method: 'POST'});
+    cameraRunning = state.running !== false;
+    cameraReady = !!state.ready;
+    if (!cameraRunning) {
+      stopPreview();
+      cameraStatus('STOPPED', state.message || 'Camera stopped by operator.');
+    } else {
+      cameraStatus('CONNECTING', state.message || 'Starting camera…');
+    }
+  } catch (error) {
+    cameraStatus('ERROR', error.message);
+  } finally {
+    cameraControlPending = false;
+    updateButton();
+    await refreshState();
+  }
+}
+byId('camera-start').addEventListener('click', () => cameraControl('start'));
+byId('camera-stop').addEventListener('click', () => cameraControl('stop'));
 
 preview.addEventListener('load', () => {
   previewPending = false;

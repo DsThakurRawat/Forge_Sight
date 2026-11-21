@@ -9,6 +9,8 @@ from pathlib import Path
 from threading import Lock, Thread
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import sys
+import time
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -16,13 +18,34 @@ from urllib.request import Request, urlopen
 
 from PIL import Image
 
-from forgesight.jetson_live_ui import LiveService, handler_for, vision_executable
+from forgesight.jetson_live_ui import CameraFeed, LiveService, handler_for, vision_executable
 from forgesight.storage import InspectionStore
 
 
 class StubCamera:
+    def __init__(self):
+        self.running = True
+        self.calls = []
+        self.fail_controls = False
+
     def preview(self):
         return b"\xff\xd8\xff\xd9"
+
+    def state(self):
+        return {"ready": self.running, "running": self.running,
+                "message": "Live test preview" if self.running else "Camera stopped by operator"}
+
+    def turn_on(self):
+        if self.fail_controls:
+            raise RuntimeError("test control failure")
+        self.calls.append("start")
+        self.running = True
+
+    def turn_off(self):
+        if self.fail_controls:
+            raise RuntimeError("test control failure")
+        self.calls.append("stop")
+        self.running = False
 
 
 class StubService:
@@ -31,7 +54,7 @@ class StubService:
         self.requests = []
 
     def state(self):
-        return {"camera": {"ready": True, "message": "Test frame"},
+        return {"camera": self.camera.state(),
                 "busy": False, "latest": None, "history": [],
                 "advice": {"status": "NOT_ELIGIBLE", "advisory": None},
                 "replay_samples": ["test/bent/017.png"],
@@ -97,6 +120,108 @@ class LiveHttpTests(unittest.TestCase):
                           headers={"Origin": self.base, "Content-Type": "application/json"})
         self.assertEqual(urlopen(request).status, 202)
         self.assertEqual(self.service.requests, [("SCREEN-001", "screen_photo")])
+
+    def test_camera_controls_change_server_state_and_require_same_origin(self):
+        page = urlopen(self.base).read()
+        self.assertIn(b'id="camera-start"', page)
+        self.assertIn(b'id="camera-stop"', page)
+        self.assertTrue(json.loads(urlopen(self.base + "/api/state").read())["camera"]["running"])
+
+        stop = Request(self.base + "/api/camera/stop", method="POST", data=b"",
+                       headers={"Origin": self.base})
+        response = urlopen(stop)
+        self.assertEqual(response.status, 200)
+        self.assertFalse(json.loads(response.read())["running"])
+        self.assertEqual(self.service.camera.calls, ["stop"])
+
+        start = Request(self.base + "/api/camera/start", method="POST", data=b"",
+                        headers={"Origin": self.base})
+        self.assertTrue(json.loads(urlopen(start).read())["running"])
+        self.assertEqual(self.service.camera.calls, ["stop", "start"])
+
+        cross_origin = Request(self.base + "/api/camera/stop", method="POST", data=b"",
+                               headers={"Origin": "http://elsewhere.invalid"})
+        with self.assertRaises(HTTPError) as rejected:
+            urlopen(cross_origin)
+        self.assertEqual(rejected.exception.code, 403)
+        self.assertTrue(self.service.camera.running)
+
+        invalid_body = Request(self.base + "/api/camera/stop", method="POST", data=b"x",
+                               headers={"Origin": self.base})
+        with self.assertRaises(HTTPError) as rejected:
+            urlopen(invalid_body)
+        self.assertEqual(rejected.exception.code, 400)
+
+        self.service.camera.fail_controls = True
+        failed = Request(self.base + "/api/camera/stop", method="POST", data=b"",
+                         headers={"Origin": self.base})
+        with self.assertRaises(HTTPError) as rejected:
+            urlopen(failed)
+        self.assertEqual(rejected.exception.code, 503)
+        self.assertIn(b"test control failure", rejected.exception.read())
+
+    def test_camera_feed_stop_releases_and_start_reopens_capture(self):
+        released = []
+
+        class Frame:
+            shape = (480, 640, 3)
+
+            def copy(self):
+                return self
+
+        class Encoded:
+            def tobytes(self):
+                return b"jpeg"
+
+        class Capture:
+            def __init__(self, index, backend):
+                self.was_released = False
+                released.append(self)
+
+            def isOpened(self):
+                return True
+
+            def set(self, *args):
+                return True
+
+            def read(self):
+                time.sleep(0.005)
+                return True, Frame()
+
+            def release(self):
+                self.was_released = True
+
+        fake_cv2 = SimpleNamespace(
+            CAP_V4L2=1, CAP_PROP_FOURCC=2, CAP_PROP_FRAME_WIDTH=3,
+            CAP_PROP_FRAME_HEIGHT=4, CAP_PROP_FPS=5, COLOR_BGR2GRAY=6,
+            IMWRITE_JPEG_QUALITY=7, VideoCapture=Capture,
+            VideoWriter_fourcc=lambda *args: 8,
+            cvtColor=lambda frame, code: SimpleNamespace(mean=lambda: 200),
+            imencode=lambda *args: (True, Encoded()))
+        camera = CameraFeed()
+
+        def wait_for(predicate):
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if predicate():
+                    return True
+                time.sleep(0.01)
+            return False
+
+        with patch.dict(sys.modules, {"cv2": fake_cv2}):
+            camera.start()
+            try:
+                self.assertTrue(wait_for(lambda: camera.state()["ready"]))
+                camera.turn_off()
+                self.assertTrue(released[0].was_released)
+                self.assertFalse(camera.state()["running"])
+
+                camera.turn_on()
+                self.assertTrue(wait_for(lambda: len(released) == 2 and camera.state()["ready"]))
+                camera.turn_off()
+                self.assertTrue(released[1].was_released)
+            finally:
+                camera.close()
 
     def test_cross_origin_and_missing_declaration_are_rejected(self):
         for origin, confirmed, code in [("http://elsewhere.invalid", True, 403),

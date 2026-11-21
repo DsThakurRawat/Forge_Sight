@@ -37,7 +37,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.page = self.browser.new_page(viewport={'width': 1366, 'height': 768})
         self.errors = []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
-        self.state = dict(camera=dict(ready=True, message='Live C270 preview'), busy=False,
+        self.state = dict(camera=dict(ready=True, running=True, message='Live C270 preview'), busy=False,
                           latest=copy.deepcopy(RESULT), history=[], manual_reviews=[],
                           advice=dict(status='NOT_REQUESTED', advisory=None))
         self.posts = []
@@ -61,7 +61,13 @@ class DashboardBrowserTests(unittest.TestCase):
             route.fulfill(content_type=mime, body=(WEB / name).read_bytes())
         elif route.request.method == 'POST':
             self.posts.append((path, route.request.post_data_buffer, route.request.headers))
-            if self.hold_posts:
+            if path in ('/api/camera/start', '/api/camera/stop'):
+                running = path.endswith('/start')
+                self.state['camera'] = dict(ready=False, running=running,
+                    message='Starting camera' if running else 'Camera stopped by operator')
+                route.fulfill(status=200, content_type='application/json',
+                              body=json.dumps(self.state['camera']))
+            elif self.hold_posts:
                 self.pending.append(route)
             else:
                 route.fulfill(status=409 if self.post_error else 202, content_type='application/json',
@@ -93,6 +99,26 @@ class DashboardBrowserTests(unittest.TestCase):
         self.state['camera'] = dict(ready=False, message='Starting camera')
         self.refresh()
         expect(self.page.locator('#camera-status')).to_have_text('CONNECTING')
+
+    def test_camera_start_stop_buttons_call_api_and_update_controls(self):
+        expect(self.page.locator('#camera-status')).to_have_text('LIVE')
+        expect(self.page.locator('#camera-start')).to_be_disabled()
+        expect(self.page.locator('#camera-stop')).to_be_enabled()
+
+        with self.page.expect_response('**/api/camera/stop') as stopped:
+            self.page.locator('#camera-stop').click()
+        self.assertEqual(stopped.value.status, 200)
+        expect(self.page.locator('#camera-status')).to_have_text('STOPPED')
+        expect(self.page.locator('#preview')).to_be_hidden()
+        expect(self.page.locator('#camera-start')).to_be_enabled()
+        expect(self.page.locator('#camera-stop')).to_be_disabled()
+
+        with self.page.expect_response('**/api/camera/start') as started:
+            self.page.locator('#camera-start').click()
+        self.assertEqual(started.value.status, 200)
+        expect(self.page.locator('#camera-status')).to_have_text('CONNECTING')
+        expect(self.page.locator('#camera-start')).to_be_disabled()
+        expect(self.page.locator('#camera-stop')).to_be_enabled()
 
     def test_processing_and_error_clear_previous_result_and_images(self):
         expect(self.page.locator('#overlay')).to_be_visible()
