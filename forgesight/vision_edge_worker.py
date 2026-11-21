@@ -240,7 +240,11 @@ def serve(socket_path, worker, idle_timeout_seconds=None, request_read_timeout_s
         socket_path.unlink(missing_ok=True)
 
 
-def request(socket_path, request_dict, timeout_seconds=180, connect_retries=50):
+WORKER_REQUEST_TIMEOUT_SECONDS = 180
+
+
+def request(socket_path, request_dict, timeout_seconds=WORKER_REQUEST_TIMEOUT_SECONDS,
+            connect_retries=50):
     """Client: send one inference request, return the report or raise."""
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
