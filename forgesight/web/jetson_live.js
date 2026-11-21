@@ -55,8 +55,12 @@ async function requestJSON(path, options = {}) {
   const timeout = setTimeout(() => controller.abort(), options.method ? 30000 : 5000);
   try {
     const response = await fetch(path, {cache: 'no-store', ...options, signal: controller.signal});
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || result.status || 'Station request failed');
+    const text = await response.text();
+    let result = {};
+    try { result = JSON.parse(text); } catch { if (text) result = {error: text}; }
+    if (!response.ok) throw new Error(
+      (result.error || result.status || 'Station request failed')
+      + (result.support_id ? ' [support ' + result.support_id + ']' : ''));
     return result;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Station did not respond in time. Check history before retrying.');

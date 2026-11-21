@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import subprocess
 import sys
 from threading import Event, Lock, Thread
@@ -999,7 +1000,13 @@ def handler_for(service):
                 try:
                     status = service.request_advice()
                 except ValueError as error:
-                    self.send(409, json.dumps({"error": str(error)}).encode(), "application/json")
+                    code, body = _refusal_body("/api/advice", error, safe=True)
+                    self.send(code, body.encode(), "application/json")
+                    return
+                except (OSError, RuntimeError, TypeError, AttributeError,
+                        sqlite3.Error) as error:
+                    code, body = _refusal_body("/api/advice", error, safe=False)
+                    self.send(code, body.encode(), "application/json")
                     return
                 self.send(202 if status == "PENDING" else 409,
                           json.dumps({"status": status}).encode(), "application/json")
@@ -1041,12 +1048,45 @@ def handler_for(service):
                         raise ValueError("Invalid benchmark declaration")
                     service.upload_diagnostic(self.headers.get("X-Upload-Id"), self.rfile.read(length),
                                               benchmark == "yes")
-            except (ValueError, RuntimeError, TypeError, AttributeError) as error:
-                self.send(409, json.dumps({"error": str(error)}).encode(), "application/json")
+            except ValueError as error:
+                code, body = _refusal_body(self.path, error, safe=True)
+                self.send(code, body.encode(), "application/json")
+                return
+            except (RuntimeError, TypeError, AttributeError, OSError,
+                    sqlite3.Error) as error:
+                # SQLite and filesystem failures must never drop the
+                # connection or leak internals to the client.
+                code, body = _refusal_body(self.path, error, safe=False)
+                self.send(code, body.encode(), "application/json")
                 return
             self.send(202, b'{"status":"PROCESSING"}', "application/json")
 
     return Handler
+
+
+def _refusal_body(path, error, *, safe):
+    """Error body with a support ID; the log line with the same ID has detail.
+
+    Validation messages are operator-facing by convention and returned with
+    a 409; that is a policy for known validation paths, not a guarantee that
+    every ValueError text is safe. Anything else is an internal failure: the
+    client gets a generic
+    500 message and the support ID, never raw internals; the full scrubbed
+    detail is in the operation log under the same ID. The endpoint is
+    normalized (no query string) before logging.
+    """
+    support_id = uuid4().hex[:8]
+    endpoint = path.split("?", 1)[0]
+    if safe:
+        _log.warning("POST %s refused (support_id=%s): %s",
+                     endpoint, support_id, scrub(error))
+        return 409, json.dumps({"error": str(error), "support_id": support_id})
+    _log.error("POST %s failed (support_id=%s): %s",
+               endpoint, support_id, scrub(error))
+    return 500, json.dumps({
+        "error": "Station failed to complete the request; quote the support "
+                 "ID when reporting it.",
+        "support_id": support_id})
 
 
 def main():
