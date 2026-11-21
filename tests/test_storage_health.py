@@ -84,6 +84,59 @@ class StorageHealthTests(unittest.TestCase):
         refreshed = self.service.storage_health(now=1061.0)
         self.assertEqual(refreshed["orphan_count"], 1)
 
+    def test_locked_store_reports_unavailable_not_zero_orphans(self):
+        import sqlite3
+        self.make_run("part_consulted",
+                      {"inspection_id": "11111111-1111-1111-1111-111111111111"})
+        with mock.patch.object(self.store, "get_inspection",
+                               side_effect=sqlite3.OperationalError("locked")):
+            health = self.service.storage_health()
+        self.assertEqual(health["status"], "UNAVAILABLE")
+        # A store failure must not masquerade as "no orphans".
+        self.assertFalse(health["status"] == "OK" and health["orphan_count"])
+
+    def test_state_survives_store_failure(self):
+        import sqlite3
+        self.service.lock = __import__("threading").Lock()
+        self.service.latest = None
+        self.service.busy = False
+        self.service.replay_samples = {}
+        self.service.local_replay_samples = []
+        self.service.advice_state = lambda: {"status": "NOT_CONNECTED", "advisory": None}
+        self.service.camera = mock.Mock()
+        self.service.camera.state.return_value = {"ready": False, "message": "x"}
+        self.make_run("part_consulted",
+                      {"inspection_id": "11111111-1111-1111-1111-111111111111"})
+        with mock.patch.object(self.store, "get_inspection",
+                               side_effect=sqlite3.OperationalError("locked")):
+            state = self.service.state()  # must not raise
+        self.assertEqual(state["storage"]["status"], "UNAVAILABLE")
+
+    def test_tampered_same_id_record_is_classified_mismatch(self):
+        record = self.confirmed_record()
+        tampered = dict(record)
+        tampered["decision"] = dict(record["decision"], grade="SCRAP")
+        self.make_run("replay_tampered", tampered)
+        health = self.service.storage_health()
+        self.assertEqual(health["orphans"], {"replay_tampered": "mismatch"})
+
+    def test_symlinked_run_dir_is_not_traversed(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        link = self.runs / "part_link"
+        link.symlink_to(outside, target_is_directory=True)
+        health = self.service.storage_health()
+        self.assertEqual(health["orphan_count"], 0)
+
+    def test_scan_is_bounded_and_reports_incomplete(self):
+        for index in range(5):
+            self.make_run("part_%03d" % index)
+        with mock.patch("forgesight.jetson_live_ui.STORAGE_SCAN_MAX_DIRS", 3):
+            health = self.service.storage_health()
+        self.assertEqual(health["status"], "INCOMPLETE")
+        self.assertTrue(health["truncated"])
+        self.assertLessEqual(health["orphan_count"], 3)
+
     def test_state_exposes_storage_health(self):
         self.service.lock = __import__("threading").Lock()
         self.service.latest = None
