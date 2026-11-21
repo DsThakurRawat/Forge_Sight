@@ -616,5 +616,48 @@ class UiRecoveryTests(unittest.TestCase):
         service.advice_queue.close()
 
 
+class AdviceFuturesBoundTest(unittest.TestCase):
+    """LiveService.advice_futures grew by one entry per inspection forever."""
+
+    def service(self):
+        from forgesight.jetson_live_ui import LiveService
+        service = LiveService.__new__(LiveService)
+        service.advice_futures = {}
+        return service
+
+    def future(self, done):
+        f = mock.Mock()
+        f.done.return_value = done
+        return f
+
+    def test_completed_futures_pruned_to_newest_bound(self):
+        from forgesight.jetson_live_ui import ADVICE_FUTURES_COMPLETED_KEPT
+        service = self.service()
+        for i in range(ADVICE_FUTURES_COMPLETED_KEPT + 10):
+            service.advice_futures["old-%d" % i] = self.future(done=True)
+        service._prune_advice_futures()
+        self.assertEqual(len(service.advice_futures), ADVICE_FUTURES_COMPLETED_KEPT)
+        self.assertNotIn("old-0", service.advice_futures)
+        self.assertIn("old-%d" % (ADVICE_FUTURES_COMPLETED_KEPT + 9),
+                       service.advice_futures)
+
+    def test_pending_futures_never_evicted(self):
+        from forgesight.jetson_live_ui import ADVICE_FUTURES_COMPLETED_KEPT
+        service = self.service()
+        for i in range(ADVICE_FUTURES_COMPLETED_KEPT + 5):
+            service.advice_futures["done-%d" % i] = self.future(done=True)
+        for i in range(3):
+            service.advice_futures["pending-%d" % i] = self.future(done=False)
+        service._prune_advice_futures()
+        for i in range(3):
+            self.assertIn("pending-%d" % i, service.advice_futures)
+
+    def test_below_bound_is_untouched(self):
+        service = self.service()
+        service.advice_futures["a"] = self.future(done=True)
+        service._prune_advice_futures()
+        self.assertIn("a", service.advice_futures)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -211,6 +211,9 @@ class CameraFeed:
             self.stop.wait(1)
 
 
+ADVICE_FUTURES_COMPLETED_KEPT = 32
+
+
 class LiveService:
     def __init__(self, args, camera):
         self.args = args
@@ -466,6 +469,20 @@ class LiveService:
         if summary.get("persistent_worker_unhealthy"):
             self._respawn_advice_worker()
 
+    def _prune_advice_futures(self):
+        """Bound advice_futures growth; caller holds self.lock.
+
+        Completed futures are retained only so a late /api/state read can
+        resolve a finished request. Without a bound the dict gains one entry
+        per inspection for the life of the process, leaking every Future and
+        its captured subprocess result. Keep the newest few completed
+        entries; in-flight futures are never evicted.
+        """
+        completed = [key for key, future in self.advice_futures.items()
+                     if future.done()]
+        for key in completed[:-ADVICE_FUTURES_COMPLETED_KEPT]:
+            self.advice_futures.pop(key, None)
+
     def request_advice(self):
         with self.lock:
             latest, root = self.latest, self.latest_root
@@ -542,6 +559,7 @@ class LiveService:
                              record["inspection_id"])
                 return "BUSY"
             self.advice_futures[record["inspection_id"]] = future
+            self._prune_advice_futures()
             _log.info("Advice request for inspection %s submitted (worker=%s).",
                       record["inspection_id"],
                       self.advice_worker is not None and self.advice_worker.poll() is None)
