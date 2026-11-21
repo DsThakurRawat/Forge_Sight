@@ -241,6 +241,40 @@ class RefusalSupportIdTests(unittest.TestCase):
         self.assertTrue(logged)
         self.assertIn("/api/inspect", logged[0])
 
+    def test_internal_failure_is_500_generic_with_support_id(self):
+        def broken(*args):
+            raise OSError("disk full while writing token=secret99 payload")
+        self.service.inspect = broken
+        error = self.post("/api/inspect", {"part_id": "NUT-002", "confirmed": True,
+                                           "source_kind": "screen_photo"})
+        self.assertEqual(error.code, 500)
+        body = json.loads(error.read())
+        # No internals and no secret-shaped content reach the client.
+        self.assertNotIn("disk full", body["error"])
+        self.assertNotIn("secret99", json.dumps(body))
+        support_id = body["support_id"]
+        self.assertRegex(support_id, r"^[0-9a-f]{8}$")
+        logged = [r for r in self.records
+                  if "support_id=" + support_id in r.getMessage()]
+        self.assertTrue(logged)
+        self.assertEqual(logged[0].levelno, logging.ERROR)
+        self.assertIn("/api/inspect", logged[0].getMessage())
+        self.assertNotIn("?", logged[0].getMessage())
+        # The log line has the detail, scrubbed.
+        self.assertIn("disk full", logged[0].getMessage())
+        self.assertNotIn("secret99", logged[0].getMessage())
+
+    def test_sqlite_failure_is_500_not_a_dropped_connection(self):
+        import sqlite3
+        def broken(*args):
+            raise sqlite3.OperationalError("database is locked")
+        self.service.inspect = broken
+        error = self.post("/api/inspect", {"part_id": "NUT-003", "confirmed": True,
+                                           "source_kind": "screen_photo"})
+        self.assertEqual(error.code, 500)
+        body = json.loads(error.read())
+        self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
+
     def test_advice_refusal_carries_support_id(self):
         def refuse():
             raise ValueError("Llama advice is available after a flagged result")
