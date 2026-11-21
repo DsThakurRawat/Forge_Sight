@@ -12,7 +12,7 @@ import subprocess
 import sys
 from threading import Event, Lock, Thread
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from PIL import Image
 
@@ -507,17 +507,51 @@ class LiveService:
             self.store.save_correction(correction)
             return correction
 
-    def image(self, name):
-        with self.lock:
-            root = self.latest_root
-            source = self.latest_source
-        if root is None:
-            return None
+    def inspection_image(self, inspection_id, name):
+        """Evidence bytes bound to one stored inspection, never the global latest.
+
+        The record in SQLite is the authority for which file and which digest
+        belong to an inspection. Serving whatever the latest run directory
+        holds could show one inspection's decision with another's image, and
+        re-reading changed bytes would misrepresent the original evidence.
+        Returns (status, data): 200 with bytes, 404 when unknown/unavailable,
+        409 when the bytes no longer match the recorded digest.
+        """
+        try:
+            parsed = UUID(str(inspection_id))
+        except (ValueError, AttributeError, TypeError):
+            return 404, None
+        if str(parsed) != inspection_id:
+            # UUID() also accepts 32-hex-without-hyphens, braced and uppercase
+            # forms; the store keys on the canonical hyphenated form and
+            # raises on the others. Treat any non-canonical form as unknown.
+            return 404, None
+        try:
+            record = self.store.get_inspection(inspection_id)
+        except (ValueError, KeyError, TypeError):
+            # A lookup failure is an unknown inspection, never a 500.
+            return 404, None
+        if record is None:
+            return 404, None
         if name == "overlay":
-            path = next(iter(sorted(root.glob("response_overlay.*"))), root / "response_overlay.png")
+            reference = record["artifacts"].get("response_overlay")
+            expected = record["artifacts"].get("response_overlay_sha256")
         else:
-            path = source
-        return path.read_bytes() if path is not None and path.is_file() else None
+            reference = record["source"].get("path")
+            expected = record["source"].get("sha256")
+        if not reference:
+            return 404, None
+        path = Path(reference).resolve()
+        runs_root = Path(self.args.runs_root).resolve()
+        if (not path.is_relative_to(runs_root)
+                or path.suffix.lower() not in (".png", ".jpg", ".jpeg")):
+            return 404, None
+        if not path.is_file():
+            return 404, None
+        data = path.read_bytes()
+        if expected and hashlib.sha256(data).hexdigest() != expected:
+            return 409, None
+        return 200, data
 
     def replay(self, replay_id, dataset_path, data):
         if not isinstance(replay_id, str) or not PART_ID.fullmatch(replay_id):
@@ -769,9 +803,20 @@ def handler_for(service):
             elif path == "/api/frame.jpg":
                 frame = service.camera.preview()
                 self.send(200 if frame else 503, frame or b"Camera unavailable", "image/jpeg" if frame else "text/plain")
-            elif path in ("/api/overlay.png", "/api/source.png"):
-                data = service.image("overlay" if path.endswith("overlay.png") else "source")
-                self.send(200 if data else 404, data or b"Image unavailable", "image/png" if data else "text/plain")
+            elif path.startswith("/api/inspection/"):
+                parts = path.split("/")
+                kind = parts[4] if len(parts) == 5 else ""
+                if kind not in ("source.png", "overlay.png"):
+                    self.send(404, b"Not found", "text/plain")
+                    return
+                status, data = service.inspection_image(
+                    parts[3], "overlay" if kind.startswith("overlay") else "source")
+                if status == 409:
+                    self.send(409, b"Saved image changed; original inspection evidence does not match.",
+                              "text/plain")
+                else:
+                    self.send(200 if data else 404, data or b"Image unavailable",
+                              "image/png" if data else "text/plain")
             elif path in ("/", "/app.js", "/style.css"):
                 file = {"/": "jetson_live.html", "/app.js": "jetson_live.js",
                         "/style.css": "jetson_live.css"}[path]
