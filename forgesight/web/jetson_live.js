@@ -36,7 +36,10 @@ function updateButton() {
     !byId('review-outcome').value || byId('review-reason').value.trim().length < 3;
   const eligible = currentLatest?.status === 'ANALYZED' &&
     currentLatest?.candidate === 'ANOMALY_CANDIDATE' && savedModes.includes(currentLatest?.source_mode);
-  byId('advice-request').disabled = locked || !eligible || adviceState?.status !== 'NOT_REQUESTED';
+  // A failed or unavailable attempt may be retried; the server preserves the
+  // earlier report aside and starts a fresh attempt.
+  byId('advice-request').disabled = locked || !eligible ||
+    !['NOT_REQUESTED', 'ADVICE_UNAVAILABLE'].includes(adviceState?.status);
   byId('inspect').textContent = busy ? 'Inspection in progress…' : 'Capture & analyze';
   byId('diagnostic-submit').textContent = busy ? 'Inspection in progress…' : 'Analyze uploaded PNG';
   for (const form of ['capture-form', 'upload-form', 'review-form']) {
@@ -200,13 +203,13 @@ function renderAdvice(advice) {
     NOT_ELIGIBLE: 'Advice is available after a flagged saved-image result.',
     NOT_REQUESTED: 'Flagged image saved. You can request a separate Llama note.',
     PENDING: 'Llama is generating on this Jetson through ExecuTorch…',
-    ADVICE_UNAVAILABLE: 'Llama advice was unavailable. The inspection grade is unchanged.',
+    ADVICE_UNAVAILABLE: 'Llama advice was unavailable. The inspection grade is unchanged. You can try again.',
     GENERATED_REQUIRES_HUMAN_REVIEW: 'Generated operator note · human review required.'
   };
   byId('advice-status').textContent = labels[status] || 'Llama advice status is unknown.';
   const runtime = advice?.llama_runtime === 'PERSISTENT_WORKER'
     ? 'Warm worker: the model stays loaded between notes.'
-    : advice?.llama_runtime === 'COLD_SUBPROCESS'
+    : (advice?.llama_runtime || '').includes('COLD')
     ? 'Cold process: the model loads for each note.' : 'No runtime mode reported.';
   byId('advice-runtime').textContent = runtime + (advice?.advice_worker_boot_error
     ? ' The persistent worker did not start; the slower cold path is available.' : '');
