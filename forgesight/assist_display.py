@@ -59,6 +59,9 @@ def advice_for(record, root):
             "note": note, "evidence_ids": response["evidence_ids"],
             "guidance_approval": advisory.get("guidance_approval"),
             "source_mode": advisory.get("source_mode"),
-            "jetson_reported": True}}
+            "jetson_reported": True},
+            # The runtime that produced THIS advisory, recorded in the report;
+            # a process alive now says nothing about a saved result.
+            "llama_runtime_mode": report.get("llama_runtime_mode")}
     except (OSError, ValueError, TypeError, KeyError):
         return {"status": "ADVICE_UNAVAILABLE", "advisory": None}

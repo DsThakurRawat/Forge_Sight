@@ -356,8 +356,10 @@ class LiveService:
             future = self.advice_futures.get(latest.get("inspection_id")) if latest else None
         if not self.llama_ready:
             return {"status": "NOT_CONNECTED", "advisory": None}
-        mode = {"llama_runtime": "PERSISTENT_WORKER" if self.advice_worker is not None
-                and self.advice_worker.poll() is None else "COLD_SUBPROCESS",
+        worker_available = (self.advice_worker is not None
+                            and self.advice_worker.poll() is None)
+        mode = {"llama_runtime": "PERSISTENT_WORKER" if worker_available else "COLD_SUBPROCESS",
+                "advice_worker_available_now": worker_available,
                 "advice_worker_boot_error": self.advice_worker_boot_error}
         if (not latest or latest.get("status") != "ANALYZED"
                 or latest.get("candidate") != "ANOMALY_CANDIDATE"
@@ -378,7 +380,12 @@ class LiveService:
         if future is not None and advice["status"] in ("NOT_REQUESTED", "PENDING"):
             return {"status": "ADVICE_UNAVAILABLE", "advisory": None, **mode}
         if isinstance(advice, dict):
+            recorded = advice.pop("llama_runtime_mode", None)
             advice = {**advice, **mode}
+            if advice.get("status") == "GENERATED_REQUIRES_HUMAN_REVIEW" and recorded:
+                # A saved advisory carries the runtime that produced it; the
+                # process alive now may not be the one that generated it.
+                advice["llama_runtime"] = recorded
         return advice
 
     def _recover_finished_advice(self, inspection_id, future):
@@ -427,20 +434,39 @@ class LiveService:
             if pending is not None and not pending.done():
                 return "ALREADY_REQUESTED"
             if output.exists():
-                if (output / "advice_report.json").is_file():
-                    return "ALREADY_REQUESTED"
-                # An earlier attempt died before publishing its report (outer
-                # kill, crash, strict-JSON failure). Its files are incomplete
-                # and must not masquerade as a finished advisory, but they
-                # must not block a fresh request either: quarantine them
-                # aside, never delete. The suffix is unique per quarantine so
-                # repeated retries within one second cannot collide; a
-                # symlinked output moves the link itself, never its target.
-                quarantine = output.with_name(
-                    output.name + ".incomplete-"
-                    + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-                    + "-" + uuid4().hex[:8])
-                os.replace(output, quarantine)
+                report_path = output / "advice_report.json"
+                if report_path.is_file():
+                    # Only a terminal success blocks another request. A failed
+                    # or unreadable report must stay preserved but must not
+                    # block a fresh attempt forever: quarantine it aside the
+                    # same way as incomplete output, never delete.
+                    try:
+                        if report_path.stat().st_size > 1024 * 1024:
+                            raise ValueError("Oversized advice report")
+                        report_status = json.loads(
+                            report_path.read_text(encoding="utf-8")).get("status")
+                    except (OSError, ValueError):
+                        report_status = None
+                    if report_status == "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW":
+                        return "ALREADY_REQUESTED"
+                    quarantine = output.with_name(
+                        output.name + ".failed-"
+                        + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+                        + "-" + uuid4().hex[:8])
+                    os.replace(output, quarantine)
+                else:
+                    # An earlier attempt died before publishing its report (outer
+                    # kill, crash, strict-JSON failure). Its files are incomplete
+                    # and must not masquerade as a finished advisory, but they
+                    # must not block a fresh request either: quarantine them
+                    # aside, never delete. The suffix is unique per quarantine so
+                    # repeated retries within one second cannot collide; a
+                    # symlinked output moves the link itself, never its target.
+                    quarantine = output.with_name(
+                        output.name + ".incomplete-"
+                        + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+                        + "-" + uuid4().hex[:8])
+                    os.replace(output, quarantine)
             command = [sys.executable, "-B", "-m", "forgesight.assist_jetson_replay_once",
                        "--record", str(record_path), "--database", str(self.args.database),
                        "--guidance", str(self.args.guidance),

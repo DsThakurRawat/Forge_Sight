@@ -67,6 +67,7 @@ class AdviceDisplayTests(unittest.TestCase):
         shown = advice_for(self.record, self.root)
         self.assertEqual(shown['status'], 'GENERATED_REQUIRES_HUMAN_REVIEW')
         self.assertEqual(shown['advisory']['note'], '[E1] Fixture note [G1]')
+        self.assertEqual(shown['llama_runtime_mode'], 'PERSISTENT_WORKER')
 
     def test_unknown_native_status_withheld(self):
         report = deepcopy(self.report)

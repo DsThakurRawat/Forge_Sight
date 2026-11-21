@@ -439,11 +439,71 @@ class UiRecoveryTests(unittest.TestCase):
         service = self.service()
         complete = service.advice_root / "insp-1"
         complete.mkdir()
-        (complete / "advice_report.json").write_text("{}")
+        (complete / "advice_report.json").write_text(json.dumps(
+            {"status": "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"}))
         status, run = self.submit(service)
         self.assertEqual(status, "ALREADY_REQUESTED")
         run.assert_not_called()
         self.assertFalse(list(service.advice_root.glob("insp-1.incomplete-*")))
+        self.assertFalse(list(service.advice_root.glob("insp-1.failed-*")))
+
+    def test_failed_report_is_preserved_aside_and_retried(self):
+        # Reproduced from the independent sweep: a saved ADVICE_UNAVAILABLE
+        # report used to block every later request with ALREADY_REQUESTED and
+        # the UI disabled Generate, leaving no normal retry route.
+        for name, content in (("declared-failure", json.dumps({"status": "ADVICE_UNAVAILABLE"})),
+                              ("unreadable", "{not json"),
+                              ("empty-object", "{}")):
+            with self.subTest(case=name):
+                service = self.service()
+                failed = service.advice_root / "insp-1"
+                failed.mkdir()
+                (failed / "advice_report.json").write_text(content)
+                status, run = self.submit(service)
+                self.assertEqual(status, "PENDING")
+                run.assert_called_once()
+                quarantined = list(service.advice_root.glob("insp-1.failed-*"))
+                self.assertEqual(len(quarantined), 1)
+                self.assertEqual((quarantined[0] / "advice_report.json").read_text(), content)
+                self.assertFalse(failed.exists())
+
+    def test_saved_advisory_reports_the_runtime_that_produced_it(self):
+        service = self.service()
+        service.advice_worker = None  # no worker alive NOW
+        record = json.loads(Path("manifests/graded_inspection_replay_v1.json").read_text())["records"][0]
+        record["inspection_id"] = "insp-1"
+        (service.latest_root / "record.json").write_text(json.dumps(record))
+        service.store.get_inspection.return_value = record
+        folder = service.advice_root / "insp-1"
+        folder.mkdir()
+        from forgesight.assist_contract import canonical_hash
+        (folder / "advice_report.json").write_text(json.dumps({
+            "inspection_id": "insp-1",
+            "inspection_sha256": canonical_hash(record),
+            "decision_sha256": canonical_hash(record["decision"]),
+            "authoritative_grade": record["decision"]["grade"],
+            "source_mode": "SAVED_IMAGE_REPLAY",
+            "physical_part_inspected": False,
+            "inspection_and_sqlite_unchanged": True,
+            "status": "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW",
+            "llama_runtime_mode": "PERSISTENT_WORKER",
+            "native": {"status": "GENERATED_BY_PERSISTENT_WORKER"},
+            "advisory": {
+                "inspection_id": "insp-1",
+                "inspection_sha256": canonical_hash(record),
+                "decision_sha256": canonical_hash(record["decision"]),
+                "authoritative_grade": record["decision"]["grade"],
+                "quality_grade_authority": "DETERMINISTIC_RULES_ONLY",
+                "jetson_verified": True,
+                "source_mode": "SAVED_IMAGE_REPLAY",
+                "guidance_approval": "PROTOTYPE_NOT_FACTORY_APPROVED",
+                "response": {"generated_note": "[E1] Note [G1]",
+                             "evidence_ids": ["E1", "G1"]}}}))
+        advice = service.advice_state()
+        self.assertEqual(advice["status"], "GENERATED_REQUIRES_HUMAN_REVIEW")
+        self.assertEqual(advice["llama_runtime"], "PERSISTENT_WORKER")
+        self.assertFalse(advice["advice_worker_available_now"])
+        service.advice_queue.close()
 
     def test_finished_request_without_report_does_not_block_retry(self):
         service = self.service()
