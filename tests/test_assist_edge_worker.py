@@ -551,3 +551,44 @@ class ControllerWiringTests(unittest.TestCase):
         report = json.loads((self.output / "advice_report.json").read_text())
         self.assertEqual(report["status"], "ADVICE_UNAVAILABLE")
         self.assertIn("artifact changed", report["runtime_error"])
+
+
+class WarmupTests(unittest.TestCase):
+    """Boot warmup absorbs the lazy first-generation cost before READY."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.artifact = Path(self.dir.name) / "model.pte"
+        self.artifact.write_bytes(b"stand-in model bytes")
+        self.runtime = StandInRuntime(self.artifact)
+        self.worker = aew.Worker(self.runtime)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_warmup_generates_once_through_the_guarded_path(self):
+        evidence = aew.warm_worker(self.worker)
+        self.assertEqual(self.runtime.generate_calls, 1)
+        # The warmup goes through handle(): runner state was reset first, and
+        # the one-token bound reached the runtime.
+        self.assertEqual(self.runtime.events, ["reset", "generate"])
+        self.assertEqual(evidence["warmup_generated_tokens"], 1)
+        self.assertGreaterEqual(evidence["warmup_generate_ms"], 0.0)
+        self.assertGreater(evidence["warmup_prompt_tokens"], 0)
+
+    def test_first_served_request_after_warmup_is_fresh(self):
+        aew.warm_worker(self.worker)
+        report = self.worker.handle({"prompt_text": "hold part for review",
+                                     "max_new_tokens": 32})
+        # A second reset preceded the real request; the discarded warmup
+        # output cannot leak into it.
+        self.assertEqual(self.runtime.events, ["reset", "generate", "reset", "generate"])
+        self.assertIn("hold part", report["generated_text"])
+        self.assertNotIn("warmup", report["generated_text"].lower())
+
+    def test_warmup_failure_prevents_ready(self):
+        def failing_generate(formatted, max_new_tokens):
+            raise RuntimeError("native load failed")
+        self.runtime.generate = failing_generate
+        with self.assertRaises(RuntimeError):
+            aew.warm_worker(self.worker)
