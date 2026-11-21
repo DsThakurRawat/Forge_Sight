@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 from threading import Event, Lock, Thread
@@ -28,6 +29,8 @@ _log = operation_logger()
 WEB_ROOT = Path(__file__).with_name("web")
 PART_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+LOW_DISK_BYTES = 1024 ** 3  # warn below 1 GiB free
+RUN_DIR_PREFIXES = ("part_", "replay_", "user_upload_")
 DATASET_MANIFEST_SHA256 = "14b11ebd03d5107c7ef3478e1c4d20887237e2fbef58601ac043014b8f0e340f"
 
 
@@ -562,7 +565,67 @@ class LiveService:
                              "source_mode": r["source"]["mode"],
                              "grade": r["decision"]["grade"], "status": r["status"],
                              "timestamp_utc": r["timestamp_utc"]}
-                            for r in self.store.history(limit=10)]}
+                            for r in self.store.history(limit=10)],
+                "storage": self.storage_health()}
+
+    def storage_health(self, *, now=None):
+        """Read-only runs_root/SQLite reconciliation plus free-disk check.
+
+        An orphan run directory is partial (killed before record.json) or
+        unconfirmed (record.json without a matching SQLite row). They are
+        identified and reported, never deleted: evidence retention is an
+        operator policy, not something the service decides. Results are
+        cached for 60 seconds so /api/state polls stay cheap; warnings are
+        logged only when the finding changes.
+        """
+        now = time.monotonic() if now is None else now
+        cached = getattr(self, "_storage_health", None)
+        if cached is not None and now - self._storage_health_at < 60:
+            return cached
+        runs_root = Path(self.args.runs_root)
+        health = {"orphan_count": 0, "orphan_runs": [],
+                  "disk_free_bytes": None, "low_disk": None}
+        try:
+            free = shutil.disk_usage(runs_root).free
+            health["disk_free_bytes"] = free
+            health["low_disk"] = free < LOW_DISK_BYTES
+        except OSError as error:
+            _log.warning("Could not measure free space under %s: %s",
+                         runs_root, scrub(error))
+        orphans = []
+        try:
+            entries = sorted(runs_root.iterdir())
+        except OSError as error:
+            entries = []
+            _log.warning("Could not list runs root %s: %s", runs_root, scrub(error))
+        for entry in entries:
+            if (not entry.is_dir()
+                    or not entry.name.startswith(RUN_DIR_PREFIXES)):
+                continue
+            record_path = entry / "result" / "record.json"
+            orphan = not record_path.is_file()
+            if not orphan:
+                try:
+                    inspection_id = json.loads(record_path.read_text())["inspection_id"]
+                    orphan = self.store.get_inspection(inspection_id) is None
+                except (ValueError, KeyError, TypeError, OSError):
+                    orphan = True
+            if orphan:
+                orphans.append(entry.name)
+        health["orphan_count"] = len(orphans)
+        health["orphan_runs"] = orphans[:20]
+        previous = cached or {}
+        changed = (previous.get("orphan_count"), previous.get("low_disk")) != (
+            health["orphan_count"], health["low_disk"])
+        if changed and orphans:
+            _log.warning("%d orphan run dir(s) under %s (partial or "
+                         "SQLite-unconfirmed): %s", len(orphans), runs_root,
+                         ", ".join(orphans[:20]))
+        if changed and health["low_disk"]:
+            _log.warning("Low disk space under %s: %d bytes free.",
+                         runs_root, health["disk_free_bytes"])
+        self._storage_health, self._storage_health_at = health, now
+        return health
 
     def manual_review(self, inspection_id, actor, outcome, reason):
         choices = {"no_visible_issue": "PASS", "visible_issue": "REJECT",
