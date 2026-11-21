@@ -128,6 +128,30 @@ class StorageHealthTests(unittest.TestCase):
         health = self.service.storage_health()
         self.assertEqual(health["orphan_count"], 0)
 
+    def test_symlinked_result_dir_is_rejected_before_any_read(self):
+        outside = self.root / "outside"
+        (outside / "result").mkdir(parents=True)
+        marker = outside / "result" / "record.json"
+        marker.write_text(json.dumps(
+            {"inspection_id": "11111111-1111-1111-1111-111111111111"}))
+        folder = self.runs / "part_nested"
+        folder.mkdir()
+        (folder / "result").symlink_to(outside / "result",
+                                       target_is_directory=True)
+        with mock.patch.object(self.store, "get_inspection") as lookup:
+            health = self.service.storage_health()
+        self.assertEqual(health["orphans"], {"part_nested": "invalid"})
+        lookup.assert_not_called()  # the outside record was never consulted
+
+    def test_entry_scan_is_capped_and_streamed(self):
+        for index in range(10):
+            (self.runs / ("filler-%02d" % index)).mkdir()
+        self.make_run("part_real")
+        with mock.patch("forgesight.jetson_live_ui.STORAGE_SCAN_MAX_ENTRIES", 3):
+            health = self.service.storage_health()
+        self.assertEqual(health["status"], "INCOMPLETE")
+        self.assertTrue(health["truncated"])
+
     def test_scan_is_bounded_and_reports_incomplete(self):
         for index in range(5):
             self.make_run("part_%03d" % index)

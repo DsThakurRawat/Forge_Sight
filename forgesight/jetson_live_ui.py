@@ -32,7 +32,8 @@ PART_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 LOW_DISK_BYTES = 1024 ** 3  # warn below 1 GiB free
 RUN_DIR_PREFIXES = ("part_", "replay_", "user_upload_")
-STORAGE_SCAN_MAX_DIRS = 200        # bound one reconciliation pass
+STORAGE_SCAN_MAX_ENTRIES = 5000    # directory entries examined per pass
+STORAGE_SCAN_MAX_DIRS = 200        # run dirs reconciled per pass
 STORAGE_SCAN_MAX_RECORD_BYTES = 1024 * 1024
 DATASET_MANIFEST_SHA256 = "14b11ebd03d5107c7ef3478e1c4d20887237e2fbef58601ac043014b8f0e340f"
 
@@ -605,33 +606,35 @@ class LiveService:
                 _log.warning("Could not measure free space under %s: %s",
                              runs_root, scrub(error))
             scanned = 0
+            orphans = {}
             try:
-                entries = list(os.scandir(runs_root))
+                with os.scandir(runs_root) as listing:
+                    for examined, entry in enumerate(listing, 1):
+                        if examined > STORAGE_SCAN_MAX_ENTRIES:
+                            health["status"] = "INCOMPLETE"
+                            health["truncated"] = True
+                            break
+                        try:
+                            if (not entry.is_dir(follow_symlinks=False)
+                                    or not entry.name.startswith(RUN_DIR_PREFIXES)):
+                                continue
+                        except OSError:
+                            continue
+                        if scanned >= STORAGE_SCAN_MAX_DIRS:
+                            health["status"] = "INCOMPLETE"
+                            health["truncated"] = True
+                            break
+                        scanned += 1
+                        kind = self._classify_run_dir(Path(entry.path))
+                        if kind == "unavailable":
+                            health["status"] = "UNAVAILABLE"
+                            break
+                        if kind is not None:
+                            orphans[entry.name] = kind
             except OSError as error:
-                entries = None
                 health["status"] = "UNAVAILABLE"
                 _log.warning("Could not list runs root %s: %s",
                              runs_root, scrub(error))
-            orphans = {}
-            if entries is not None:
-                for entry in entries:
-                    if scanned >= STORAGE_SCAN_MAX_DIRS:
-                        health["status"] = "INCOMPLETE"
-                        health["truncated"] = True
-                        break
-                    try:
-                        if (not entry.is_dir(follow_symlinks=False)
-                                or not entry.name.startswith(RUN_DIR_PREFIXES)):
-                            continue
-                    except OSError:
-                        continue
-                    scanned += 1
-                    kind = self._classify_run_dir(Path(entry.path))
-                    if kind == "unavailable":
-                        health["status"] = "UNAVAILABLE"
-                        break
-                    if kind is not None:
-                        orphans[entry.name] = kind
             health["orphan_count"] = len(orphans)
             health["orphan_runs"] = sorted(orphans)[:20]
             health["orphans"] = dict(sorted(orphans.items())[:20])
@@ -661,7 +664,14 @@ class LiveService:
         when the store itself cannot answer."""
         record_path = folder / "result" / "record.json"
         try:
-            if record_path.is_symlink() or not record_path.is_file():
+            # Reject link escapes before any read: a symlinked result dir or
+            # record file, or a path that resolves outside runs_root, must
+            # never be opened or looked up.
+            if ((folder / "result").is_symlink() or record_path.is_symlink()
+                    or not record_path.resolve().is_relative_to(
+                        Path(self.args.runs_root).resolve())):
+                return "invalid"
+            if not record_path.is_file():
                 return "partial"
             if record_path.stat().st_size > STORAGE_SCAN_MAX_RECORD_BYTES:
                 return "partial"  # never written by the bounded pipeline
