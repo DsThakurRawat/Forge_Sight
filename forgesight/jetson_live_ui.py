@@ -18,8 +18,11 @@ from PIL import Image
 
 from forgesight.assist_display import advice_for
 from forgesight.assist_queue import AdvisoryQueue
+from forgesight.operation_log import configure_operation_log, operation_logger, scrub
 from forgesight.storage import InspectionStore, new_correction
 from forgesight.vision_edge_live_once import MODEL_SHA256, sha256
+
+_log = operation_logger()
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -230,7 +233,12 @@ class LiveService:
         self.worker_respawn_lock = Lock()
         self.worker_respawning = False
         if args.vision_worker_socket is not None:
-            self.vision_worker = launch_vision_worker(args)
+            try:
+                self.vision_worker = launch_vision_worker(args)
+            except Exception:
+                _log.exception("Vision worker failed to start at boot.")
+                raise
+            _log.info("Vision worker started at boot.")
         self.lock = Lock()
         self.busy = False
         self.latest = None
@@ -254,6 +262,10 @@ class LiveService:
                 # Advice is optional: keep serving inspections cold; the boot
                 # error stays visible in advice_state instead of crashing the UI.
                 self.advice_worker_boot_error = str(error)
+                _log.error("Advisory worker failed to start at boot; requests "
+                           "cold-fall back and retry: %s", scrub(error))
+            else:
+                _log.info("Advisory worker started at boot.")
 
     def _inspect_inline(self, image, part_id, root, mode_flags):
         """Run the same inspection in this long-lived process; worker mode only.
@@ -284,6 +296,8 @@ class LiveService:
         if (record.get("timings") or {}).get("vision_mode") == "COLD_PROCESS_AFTER_WORKER_UNAVAILABLE":
             # The worker died (idle timeout or crash). Bring it back so the next
             # inspection is warm instead of silently running cold forever.
+            _log.warning("Inspection %s ran cold after the vision worker became unavailable; respawning.",
+                         record.get("inspection_id"))
             self._respawn_vision_worker()
 
     def _respawn_advice_worker(self):
@@ -304,9 +318,10 @@ class LiveService:
                 if self.llama_ready:
                     self.advice_worker = launch_advice_worker(self.args)
                     self.advice_worker_boot_error = None
+                    _log.info("Advisory worker respawned.")
             except Exception:
                 # Next request cold-falls-back again and retries the respawn.
-                pass
+                _log.exception("Advisory worker respawn failed; requests cold-fall back and retry.")
             finally:
                 with self.advice_worker_respawn_lock:
                     self.advice_worker_respawning = False
@@ -329,9 +344,10 @@ class LiveService:
                     except subprocess.TimeoutExpired:
                         old.kill()
                 self.vision_worker = launch_vision_worker(self.args)
+                _log.info("Vision worker respawned.")
             except Exception:
                 # Next inspection cold-falls-back again and retries the respawn.
-                pass
+                _log.exception("Vision worker respawn failed; inspections cold-fall back and retry.")
             finally:
                 with self.worker_respawn_lock:
                     self.worker_respawning = False
@@ -414,10 +430,40 @@ class LiveService:
         recovered.add(inspection_id)
         try:
             result = future.result()
-            summary = json.loads(result.stdout) if result is not None and result.stdout else {}
-        except Exception:
-            return  # a killed or crashed replay carries no summary; nothing to learn
-        if isinstance(summary, dict) and summary.get("persistent_worker_unhealthy"):
+        except Exception as error:
+            # A killed or crashed replay carries no summary; the outcome
+            # still belongs in the operation log.
+            _log.error("Advice request for inspection %s could not be collected: %s",
+                       inspection_id, scrub(error))
+            return
+        if isinstance(result, dict):
+            # AdvisoryQueue converts a raised worker (for example a subprocess
+            # timeout) into this outcome dict instead of a CompletedProcess.
+            _log.error("Advice request for inspection %s failed: status=%s error=%s",
+                       inspection_id, result.get("status"),
+                       scrub(str(result.get("error", ""))))
+            return
+        summary = {}
+        if result is not None and result.stdout:
+            try:
+                parsed = json.loads(result.stdout)
+                if isinstance(parsed, dict):
+                    summary = parsed
+            except ValueError:
+                pass
+        returncode = getattr(result, "returncode", None)
+        status = summary.get("status") or "NO_REPORT"
+        if returncode == 0:
+            _log.info("Advice request for inspection %s finished: status=%s",
+                      inspection_id, status)
+        else:
+            stderr_tail = ""
+            if result is not None and result.stderr:
+                stderr_tail = result.stderr[-400:]
+            _log.error("Advice request for inspection %s failed: returncode=%s "
+                       "status=%s stderr_tail=%s",
+                       inspection_id, returncode, status, scrub(stderr_tail))
+        if summary.get("persistent_worker_unhealthy"):
             self._respawn_advice_worker()
 
     def request_advice(self):
@@ -492,8 +538,13 @@ class LiveService:
                 command, capture_output=True, text=True,
                 timeout=self.args.llama_timeout_seconds + 45))
             if future is None:
+                _log.warning("Advice request for inspection %s could not be queued (busy).",
+                             record["inspection_id"])
                 return "BUSY"
             self.advice_futures[record["inspection_id"]] = future
+            _log.info("Advice request for inspection %s submitted (worker=%s).",
+                      record["inspection_id"],
+                      self.advice_worker is not None and self.advice_worker.poll() is None)
             return "PENDING"
 
     def state(self):
@@ -709,6 +760,7 @@ class LiveService:
 
     def _publish_result(self, part_id, result_root, image, result):
         record_path = result_root / "record.json"
+        record = None
         if record_path.is_file():
             record = json.loads(record_path.read_text())
             if self.store.get_inspection(record["inspection_id"]) != record:
@@ -738,6 +790,13 @@ class LiveService:
             self.latest_root = result_root
             self.latest_source = image
             self.latest = latest
+        if record is not None:
+            _log.info("Inspection %s (%s) finished: status=%s grade=%s vision_mode=%s",
+                      record["inspection_id"], part_id, latest.get("status"),
+                      latest.get("grade"), record.get("timings", {}).get("vision_mode"))
+        else:
+            _log.error("Inspection for part %s failed before a record was confirmed: %s",
+                       part_id, latest.get("error"))
 
     def inspect(self, part_id, confirmed, source_kind):
         if (not isinstance(part_id, str) or not PART_ID.fullmatch(part_id)
@@ -955,6 +1014,7 @@ def main():
         parser.error("Use a vision worker idle timeout of at least 60 seconds")
     args.database = args.database.resolve()
     args.runs_root = args.runs_root.resolve()
+    configure_operation_log(args.runs_root / "logs")
     args.vision_python = vision_executable(args.vision_python)
     args.model = args.model.resolve()
     args.grade_policy = args.grade_policy.resolve()
