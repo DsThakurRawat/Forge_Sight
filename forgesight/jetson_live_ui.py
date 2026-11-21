@@ -211,6 +211,9 @@ class CameraFeed:
             self.stop.wait(1)
 
 
+WORKER_RESPAWN_MIN_INTERVAL_SECONDS = 60
+
+
 class LiveService:
     def __init__(self, args, camera):
         self.args = args
@@ -255,6 +258,9 @@ class LiveService:
         self.advice_worker_respawning = False
         self.advice_worker_respawn_lock = Lock()
         self.advice_recovered = set()  # inspection ids whose wedge recovery already ran
+        self.closed = False
+        self._advice_respawn_last = 0.0
+        self._vision_respawn_last = 0.0
         if self.llama_ready and getattr(args, "llama_worker_socket", None) is not None:
             try:
                 self.advice_worker = launch_advice_worker(args)
@@ -302,9 +308,15 @@ class LiveService:
 
     def _respawn_advice_worker(self):
         with self.advice_worker_respawn_lock:
-            if self.advice_worker_respawning:
+            if self.advice_worker_respawning or getattr(self, "closed", False):
+                return
+            now = time.monotonic()
+            if now - getattr(self, "_advice_respawn_last", 0.0) < WORKER_RESPAWN_MIN_INTERVAL_SECONDS:
+                # A permanently broken worker must not earn a fresh launch
+                # attempt on every request; the cold path keeps serving.
                 return
             self.advice_worker_respawning = True
+            self._advice_respawn_last = now
 
         def respawn():
             try:
@@ -316,11 +328,26 @@ class LiveService:
                     except subprocess.TimeoutExpired:
                         old.kill()
                 if self.llama_ready:
-                    self.advice_worker = launch_advice_worker(self.args)
-                    self.advice_worker_boot_error = None
+                    with self.advice_worker_respawn_lock:
+                        if getattr(self, "closed", False):
+                            return
+                    new = launch_advice_worker(self.args)
+                    with self.advice_worker_respawn_lock:
+                        if getattr(self, "closed", False):
+                            # close() ran while the worker was launching; do
+                            # not leave a live worker behind a closed service.
+                            new.terminate()
+                            try:
+                                new.wait(timeout=10)
+                            except subprocess.TimeoutExpired:
+                                new.kill()
+                            return
+                        self.advice_worker = new
+                        self.advice_worker_boot_error = None
                     _log.info("Advisory worker respawned.")
             except Exception:
-                # Next request cold-falls-back again and retries the respawn.
+                # Next request cold-falls-back again and retries the respawn
+                # after the backoff interval.
                 _log.exception("Advisory worker respawn failed; requests cold-fall back and retry.")
             finally:
                 with self.advice_worker_respawn_lock:
@@ -330,9 +357,13 @@ class LiveService:
 
     def _respawn_vision_worker(self):
         with self.worker_respawn_lock:
-            if self.worker_respawning:
+            if self.worker_respawning or getattr(self, "closed", False):
+                return
+            now = time.monotonic()
+            if now - getattr(self, "_vision_respawn_last", 0.0) < WORKER_RESPAWN_MIN_INTERVAL_SECONDS:
                 return
             self.worker_respawning = True
+            self._vision_respawn_last = now
 
         def respawn():
             try:
@@ -343,10 +374,23 @@ class LiveService:
                         old.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         old.kill()
-                self.vision_worker = launch_vision_worker(self.args)
+                with self.worker_respawn_lock:
+                    if getattr(self, "closed", False):
+                        return
+                new = launch_vision_worker(self.args)
+                with self.worker_respawn_lock:
+                    if getattr(self, "closed", False):
+                        new.terminate()
+                        try:
+                            new.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            new.kill()
+                        return
+                    self.vision_worker = new
                 _log.info("Vision worker respawned.")
             except Exception:
-                # Next inspection cold-falls-back again and retries the respawn.
+                # Next inspection cold-falls-back again and retries the
+                # respawn after the backoff interval.
                 _log.exception("Vision worker respawn failed; inspections cold-fall back and retry.")
             finally:
                 with self.worker_respawn_lock:
@@ -355,6 +399,9 @@ class LiveService:
         Thread(target=respawn, daemon=True).start()
 
     def close(self):
+        # Block new respawns first; a respawn mid-launch terminates its new
+        # worker when it sees this flag instead of leaking past close().
+        self.closed = True
         self.advice_queue.close()
         if self.advice_worker is not None:
             self.advice_worker.terminate()
