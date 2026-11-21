@@ -131,23 +131,37 @@ def launch_advice_worker(args, python_command=None):
 
     drain = Thread(target=drain_stderr, daemon=True)
     drain.start()
+    stdout_tail = deque(maxlen=50)
     ready_holder = []
 
     def read_ready():
-        ready_holder.append(worker.stdout.readline())
+        # ExecuTorch writes diagnostic lines to stdout before the worker's
+        # readiness JSON. Keep draining those lines so the pipe cannot fill,
+        # and accept only the explicit protocol record as readiness.
+        for line in worker.stdout:
+            stdout_tail.append(line.rstrip()[-1000:])
+            try:
+                status = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(status, dict) and status.get("status") == "WORKER_READY":
+                ready_holder.append(status)
+                return
 
     reader = Thread(target=read_ready, daemon=True)
     reader.start()
     reader.join(timeout=180)
-    try:
-        status = json.loads(ready_holder[0]) if ready_holder else {}
-    except ValueError:
-        status = {}
+    status = ready_holder[0] if ready_holder else {}
     if status.get("status") != "WORKER_READY":
         exited = worker.poll()
         worker.terminate()
         drain.join(timeout=2)  # collect the worker's own error output first
-        detail = "; worker stderr tail: " + " | ".join(stderr_tail) if stderr_tail else ""
+        reader.join(timeout=2)
+        detail = ""
+        if stderr_tail:
+            detail += "; worker stderr tail: " + " | ".join(stderr_tail)
+        if stdout_tail:
+            detail += "; worker stdout tail: " + " | ".join(stdout_tail)
         if exited is not None:
             raise ValueError(
                 "Advisory worker exited during startup (code " + str(exited) +

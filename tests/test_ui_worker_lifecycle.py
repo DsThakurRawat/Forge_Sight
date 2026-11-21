@@ -32,6 +32,14 @@ STUB_CRASH = textwrap.dedent("""
     sys.exit(1)
 """)
 
+STUB_NOISY_READY = textwrap.dedent("""
+    import json, time
+    print("A runtime", flush=True)
+    print('PyTorchObserver {"generated_tokens": 1}', flush=True)
+    print(json.dumps({"status": "WORKER_READY"}), flush=True)
+    time.sleep(30)
+""")
+
 
 def make_args(socket_path):
     return argparse.Namespace(
@@ -91,6 +99,17 @@ class LaunchAdviceWorkerTests(unittest.TestCase):
         self.assertIn("exited during startup", message)
         self.assertIn("KeyError", message)
         self.assertNotIn("180 seconds", message)
+
+    def test_stdout_diagnostics_before_ready_do_not_trigger_cold_fallback(self):
+        stub = self.dir / "noisy_ready.py"
+        stub.write_text(STUB_NOISY_READY)
+        worker = launch_advice_worker(self.make_args(),
+                                      python_command=[sys.executable, str(stub)])
+        try:
+            self.assertIsNone(worker.poll())
+        finally:
+            worker.terminate()
+            worker.wait(timeout=10)
 
 
 def bare_service():
