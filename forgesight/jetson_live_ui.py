@@ -259,8 +259,8 @@ class LiveService:
         self.advice_worker_respawn_lock = Lock()
         self.advice_recovered = set()  # inspection ids whose wedge recovery already ran
         self.closed = False
-        self._advice_respawn_last = 0.0
-        self._vision_respawn_last = 0.0
+        self._advice_respawn_last = None  # no attempt yet; never suppress the first
+        self._vision_respawn_last = None
         if self.llama_ready and getattr(args, "llama_worker_socket", None) is not None:
             try:
                 self.advice_worker = launch_advice_worker(args)
@@ -311,7 +311,9 @@ class LiveService:
             if self.advice_worker_respawning or getattr(self, "closed", False):
                 return
             now = time.monotonic()
-            if now - getattr(self, "_advice_respawn_last", 0.0) < WORKER_RESPAWN_MIN_INTERVAL_SECONDS:
+            last = getattr(self, "_advice_respawn_last", None)
+            if (last is not None
+                    and now - last < WORKER_RESPAWN_MIN_INTERVAL_SECONDS):
                 # A permanently broken worker must not earn a fresh launch
                 # attempt on every request; the cold path keeps serving.
                 return
@@ -360,7 +362,9 @@ class LiveService:
             if self.worker_respawning or getattr(self, "closed", False):
                 return
             now = time.monotonic()
-            if now - getattr(self, "_vision_respawn_last", 0.0) < WORKER_RESPAWN_MIN_INTERVAL_SECONDS:
+            last = getattr(self, "_vision_respawn_last", None)
+            if (last is not None
+                    and now - last < WORKER_RESPAWN_MIN_INTERVAL_SECONDS):
                 return
             self.worker_respawning = True
             self._vision_respawn_last = now

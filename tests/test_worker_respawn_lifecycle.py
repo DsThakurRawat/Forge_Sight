@@ -63,6 +63,25 @@ class RespawnLifecycleTests(unittest.TestCase):
             self.wait_idle(service, "vision")
             self.assertEqual(launch.call_count, 1)
 
+    def test_first_respawn_is_never_suppressed_by_uptime(self):
+        # A fresh process whose monotonic clock is below the backoff
+        # interval must still get its first respawn attempt.
+        service = self.bare()
+        with mock.patch("forgesight.jetson_live_ui.time.monotonic",
+                        return_value=5.0), \
+             mock.patch("forgesight.jetson_live_ui.launch_advice_worker",
+                        side_effect=ValueError("broken")) as launch:
+            service._respawn_advice_worker()
+            self.wait_idle(service)
+            self.assertEqual(launch.call_count, 1)
+        with mock.patch("forgesight.jetson_live_ui.time.monotonic",
+                        return_value=5.0), \
+             mock.patch("forgesight.jetson_live_ui.launch_vision_worker",
+                        side_effect=ValueError("broken")) as vlaunch:
+            service._respawn_vision_worker()
+            self.wait_idle(service, "vision")
+            self.assertEqual(vlaunch.call_count, 1)
+
     def test_respawn_after_close_is_skipped(self):
         service = self.bare()
         service.closed = True
