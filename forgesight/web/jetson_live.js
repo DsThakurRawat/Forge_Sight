@@ -56,7 +56,9 @@ async function requestJSON(path, options = {}) {
   try {
     const response = await fetch(path, {cache: 'no-store', ...options, signal: controller.signal});
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || result.status || 'Station request failed');
+    if (!response.ok) throw new Error(
+      (result.error || result.status || 'Station request failed')
+      + (result.support_id ? ' [support ' + result.support_id + ']' : ''));
     return result;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Station did not respond in time. Check history before retrying.');

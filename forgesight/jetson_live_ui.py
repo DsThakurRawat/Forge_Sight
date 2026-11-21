@@ -923,7 +923,8 @@ def handler_for(service):
                 try:
                     status = service.request_advice()
                 except ValueError as error:
-                    self.send(409, json.dumps({"error": str(error)}).encode(), "application/json")
+                    self.send(409, _refusal_body("/api/advice", error).encode(),
+                              "application/json")
                     return
                 self.send(202 if status == "PENDING" else 409,
                           json.dumps({"status": status}).encode(), "application/json")
@@ -966,11 +967,18 @@ def handler_for(service):
                     service.upload_diagnostic(self.headers.get("X-Upload-Id"), self.rfile.read(length),
                                               benchmark == "yes")
             except (ValueError, RuntimeError, TypeError, AttributeError) as error:
-                self.send(409, json.dumps({"error": str(error)}).encode(), "application/json")
+                self.send(409, _refusal_body(self.path, error).encode(), "application/json")
                 return
             self.send(202, b'{"status":"PROCESSING"}', "application/json")
 
     return Handler
+
+
+def _refusal_body(path, error):
+    """409 body with a support ID; the log line with the same ID has detail."""
+    support_id = uuid4().hex[:8]
+    _log.warning("POST %s failed (support_id=%s): %s", path, support_id, scrub(error))
+    return json.dumps({"error": str(error), "support_id": support_id})
 
 
 def main():
