@@ -515,10 +515,19 @@ class LiveService:
         409 when the bytes no longer match the recorded digest.
         """
         try:
-            UUID(str(inspection_id))
+            parsed = UUID(str(inspection_id))
         except (ValueError, AttributeError, TypeError):
             return 404, None
-        record = self.store.get_inspection(inspection_id)
+        if str(parsed) != inspection_id:
+            # UUID() also accepts 32-hex-without-hyphens, braced and uppercase
+            # forms; the store keys on the canonical hyphenated form and
+            # raises on the others. Treat any non-canonical form as unknown.
+            return 404, None
+        try:
+            record = self.store.get_inspection(inspection_id)
+        except (ValueError, KeyError, TypeError):
+            # A lookup failure is an unknown inspection, never a 500.
+            return 404, None
         if record is None:
             return 404, None
         if name == "overlay":

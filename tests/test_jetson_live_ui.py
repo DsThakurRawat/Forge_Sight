@@ -288,6 +288,18 @@ class MediaBindingTests(unittest.TestCase):
         status, _ = self.get(f"/api/inspection/{self.ids[1]}/overlay.png")
         self.assertEqual(status, 200)
 
+    def test_non_canonical_uuid_forms_are_404_not_a_dropped_connection(self):
+        # 32-hex-without-hyphens and braced forms parse as UUIDs, but the
+        # store keys on the canonical hyphenated form. Serving must 404,
+        # never raise through the HTTP layer (which drops the connection).
+        canonical = self.ids[0]
+        for variant in (canonical.replace("-", ""),
+                        "{" + canonical + "}",
+                        canonical.upper()):
+            with self.subTest(variant=variant):
+                status, _ = self.get(f"/api/inspection/{variant}/source.png")
+                self.assertEqual(status, 404)
+
     def test_unknown_malformed_and_out_of_root_references_are_not_found(self):
         status, _ = self.get("/api/inspection/00000000-0000-0000-0000-000000000000/source.png")
         self.assertEqual(status, 404)
