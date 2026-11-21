@@ -40,6 +40,7 @@ unmerged vision-worker changes; the duplication is deliberate.
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import socket
@@ -141,6 +142,14 @@ class Worker:
         if (stats.get("prompt_tokens") != prompt_tokens
                 or not 0 < stats.get("generated_tokens", 0) <= request["max_new_tokens"]):
             raise ValueError("Native token statistics do not match the bounded request.")
+        # json.dumps(allow_nan=False) on the reply raises on a non-finite
+        # statistic; without this check that ValueError escaped the handler
+        # and killed the whole worker loop, wedging the warm path until an
+        # external restart. Reject it here so the request fails closed as an
+        # ordinary worker ERROR and the worker keeps serving.
+        if any(isinstance(value, float) and not math.isfinite(value)
+               for value in stats.values()):
+            raise ValueError("Native statistics carried a non-finite number.")
         return {"status": "GENERATED_BY_PERSISTENT_WORKER",
                 "worker_mode": "PERSISTENT_PROCESS",
                 "worker_started_utc": self.started_utc,
@@ -225,6 +234,17 @@ def serve(socket_path, worker, idle_timeout_seconds=None, request_read_timeout_s
                     connection.sendall(json.dumps(payload, allow_nan=False).encode("utf-8") + b"\n")
                 except OSError:
                     pass  # client went away mid-reply; keep serving the next request
+                except ValueError:
+                    # A reply that cannot be serialized as strict JSON must
+                    # never kill the worker loop; report it as an error and
+                    # keep serving the next request.
+                    try:
+                        fallback = {"status": "ERROR",
+                                    "error": {"type": "ValueError",
+                                              "message": "Worker reply was not serializable as strict JSON."}}
+                        connection.sendall(json.dumps(fallback).encode("utf-8") + b"\n")
+                    except OSError:
+                        pass  # client went away mid-reply
     finally:
         server.close()
         socket_path.unlink(missing_ok=True)
