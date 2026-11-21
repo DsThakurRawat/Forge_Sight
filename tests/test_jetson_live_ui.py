@@ -2,6 +2,7 @@
 
 from http.server import ThreadingHTTPServer
 import hashlib
+import logging
 from io import BytesIO
 import json
 from pathlib import Path
@@ -197,6 +198,108 @@ class LiveHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as rejected:
             urlopen(request)
         self.assertEqual(rejected.exception.code, 403)
+
+
+class RefusalSupportIdTests(unittest.TestCase):
+    """A refused/failed POST carries a support ID the operation log repeats."""
+
+    def setUp(self):
+        from forgesight.operation_log import operation_logger
+        self.logger = operation_logger()
+        self.records = []
+        handler = logging.Handler()
+        handler.emit = self.records.append
+        self.logger.addHandler(handler)
+        self.addCleanup(self.logger.removeHandler, handler)
+        self.service = StubService()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.service))
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.addCleanup(self.server.shutdown)
+        self.addCleanup(self.server.server_close)
+        self.base = "http://127.0.0.1:%d" % self.server.server_port
+
+    def post(self, path, payload):
+        request = Request(self.base + path, method="POST",
+                          data=json.dumps(payload).encode(),
+                          headers={"Origin": self.base,
+                                   "Content-Type": "application/json"})
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(request)
+        return raised.exception
+
+    def test_refusal_body_carries_support_id_matching_the_log(self):
+        error = self.post("/api/inspect", {"part_id": "NUT-002", "confirmed": False,
+                                           "source_kind": "physical_nut"})
+        self.assertEqual(error.code, 409)
+        body = json.loads(error.read())
+        self.assertIn("Operator declaration required", body["error"])
+        support_id = body["support_id"]
+        self.assertRegex(support_id, r"^[0-9a-f]{8}$")
+        logged = [r.getMessage() for r in self.records
+                  if "support_id=" + support_id in r.getMessage()]
+        self.assertTrue(logged)
+        self.assertIn("/api/inspect", logged[0])
+
+    def test_internal_failure_is_500_generic_with_support_id(self):
+        def broken(*args):
+            raise OSError("disk full while writing token=secret99 payload")
+        self.service.inspect = broken
+        error = self.post("/api/inspect", {"part_id": "NUT-002", "confirmed": True,
+                                           "source_kind": "screen_photo"})
+        self.assertEqual(error.code, 500)
+        body = json.loads(error.read())
+        # No internals and no secret-shaped content reach the client.
+        self.assertNotIn("disk full", body["error"])
+        self.assertNotIn("secret99", json.dumps(body))
+        support_id = body["support_id"]
+        self.assertRegex(support_id, r"^[0-9a-f]{8}$")
+        logged = [r for r in self.records
+                  if "support_id=" + support_id in r.getMessage()]
+        self.assertTrue(logged)
+        self.assertEqual(logged[0].levelno, logging.ERROR)
+        self.assertIn("/api/inspect", logged[0].getMessage())
+        self.assertNotIn("?", logged[0].getMessage())
+        # The log line has the detail, scrubbed.
+        self.assertIn("disk full", logged[0].getMessage())
+        self.assertNotIn("secret99", logged[0].getMessage())
+
+    def test_sqlite_failure_is_500_not_a_dropped_connection(self):
+        import sqlite3
+        def broken(*args):
+            raise sqlite3.OperationalError("database is locked")
+        self.service.inspect = broken
+        error = self.post("/api/inspect", {"part_id": "NUT-003", "confirmed": True,
+                                           "source_kind": "screen_photo"})
+        self.assertEqual(error.code, 500)
+        body = json.loads(error.read())
+        self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
+
+    def test_advice_refusal_carries_support_id(self):
+        def refuse():
+            raise ValueError("Llama advice is available after a flagged result")
+        self.service.request_advice = refuse
+        request = Request(self.base + "/api/advice", method="POST", data=b"",
+                          headers={"Origin": self.base, "Content-Length": "0"})
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(request)
+        self.assertEqual(raised.exception.code, 409)
+        body = json.loads(raised.exception.read())
+        self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
+
+
+    def test_advice_internal_type_error_is_500_not_disconnect(self):
+        def broken():
+            raise TypeError("unexpected None in advice path")
+        self.service.request_advice = broken
+        request = Request(self.base + "/api/advice", method="POST", data=b"",
+                          headers={"Origin": self.base, "Content-Length": "0"})
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(request)
+        self.assertEqual(raised.exception.code, 500)
+        body = json.loads(raised.exception.read())
+        self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
+        self.assertNotIn("None", body["error"])
 
 
 class ManualReviewStoreTests(unittest.TestCase):
