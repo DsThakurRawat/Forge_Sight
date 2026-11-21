@@ -204,6 +204,55 @@ class OperationLogTests(unittest.TestCase):
                             and "could not be collected" in r.getMessage()
                             for r in errors))
 
+    def test_queue_exception_dict_result_is_logged_not_crashed(self):
+        import subprocess as sp
+        from forgesight.assist_queue import AdvisoryQueue
+        service = self.advice_service()
+        queue = AdvisoryQueue()
+        self.addCleanup(queue.close)
+
+        def worker():
+            raise sp.TimeoutExpired(cmd="llama", timeout=5)
+
+        future = queue.submit(worker)
+        outcome = future.result(timeout=10)
+        # The real queue contract: a raised worker becomes an outcome dict,
+        # never a CompletedProcess.
+        self.assertIsInstance(outcome, dict)
+        service._recover_finished_advice("insp-timeout-1", future)  # must not raise
+        errors = [r for r in self.capture.records if r.levelno >= logging.ERROR]
+        self.assertTrue(any("insp-timeout-1" in r.getMessage()
+                            and "ADVICE_UNAVAILABLE" in r.getMessage()
+                            and "TimeoutExpired" in r.getMessage()
+                            for r in errors))
+
+    def test_scrub_redaction_policy_shapes(self):
+        samples = {
+            "env var": ("API_TOKEN=envvalue123", "envvalue123"),
+            "url userinfo": ("postgres://user:p%40ss@host/db", "p%40ss"),
+            "quoted multiword": ('token="multi word secret"', "multi word secret"),
+            "pem": ("-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----",
+                    "MIIabc"),
+            "bearer": ("Authorization: Bearer xyz987.more", "xyz987.more"),
+            "simple assignment": ("token=abc123", "abc123"),
+        }
+        for name, (raw, secret) in samples.items():
+            with self.subTest(name=name):
+                self.assertNotIn(secret, scrub(raw))
+        # Non-credential lookalikes stay readable.
+        self.assertIn("monkey=banana", scrub("monkey=banana"))
+        self.assertIn("/home/user/runs/x", scrub("path /home/user/runs/x"))
+
+    def test_format_split_args_are_redacted_after_rendering(self):
+        with TemporaryDirectory() as folder:
+            logger = configure_operation_log(folder)
+            logger.info("child config: %s", "token=splitsecret1")
+            for handler in logger.handlers:
+                handler.flush()
+            content = (Path(folder) / "forgesight-operations.log").read_text()
+            self.assertNotIn("splitsecret1", content)
+            self.assertIn("[redacted]", content)
+
     def boot_args(self, folder):
         root = Path(folder)
         vision_python = root / "vision-python"

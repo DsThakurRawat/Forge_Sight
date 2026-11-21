@@ -422,6 +422,13 @@ class LiveService:
             _log.error("Advice request for inspection %s could not be collected: %s",
                        inspection_id, scrub(error))
             return
+        if isinstance(result, dict):
+            # AdvisoryQueue converts a raised worker (for example a subprocess
+            # timeout) into this outcome dict instead of a CompletedProcess.
+            _log.error("Advice request for inspection %s failed: status=%s error=%s",
+                       inspection_id, result.get("status"),
+                       scrub(str(result.get("error", ""))))
+            return
         summary = {}
         if result is not None and result.stdout:
             try:
