@@ -184,6 +184,22 @@ class LiveOnceAdversarialTests(unittest.TestCase):
         self.assertEqual(record["status"], "ERROR")
         self.assertIn("Inconsistent inference evidence", record["error"]["message"])
 
+    def test_undeclared_or_wrong_map_hashes_in_response_rejected(self):
+        # The producer must declare the digests of the maps it wrote; shape and
+        # finiteness checks alone would bless swapped maps as this run's evidence.
+        for mutation in (lambda r: r.update(map_sha256="0" * 64),
+                         lambda r: r.update(source_map_sha256="0" * 64),
+                         lambda r: r.pop("map_sha256"),
+                         lambda r: r.pop("source_map_sha256")):
+            with self.subTest(mutation=mutation):
+                self.seq += 1
+                args = self.make_args(Path("/tmp/worker.sock"), part_id=f"part-map-{self.seq}")
+                with mock.patch.object(live, "worker_request") as call:
+                    self.fake_worker(call, mutate=mutation)
+                    record = live.inspect(args)
+                self.assertEqual(record["status"], "ERROR")
+                self.assertIn("Inconsistent inference evidence", record["error"]["message"])
+
     def test_grading_boundary_equivalence_cold_vs_worker(self):
         scores = [THRESHOLD, THRESHOLD + 1e-9, THRESHOLD * 1.05 + 1e-9, THRESHOLD - 1e-9]
         outcomes = {}

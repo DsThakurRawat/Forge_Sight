@@ -39,16 +39,19 @@ def fake_inference_outputs(root, tensor, height, width, model_sha=None,
     """Write the artifacts a real vision child/worker would, with valid shapes."""
     if tensor_sha is None:
         tensor_sha = live.sha256(tensor)
-    report = {"status": "ONE_IMAGE_INFERENCE_VERIFIED", "model_sha256": model_sha,
-              "tensor_sha256": tensor_sha, "threshold": threshold,
-              "score": 0.9, "candidate": "ANOMALY_CANDIDATE",
-              "model_forward_ms": 1.0, "process_peak_rss_kib": 1000,
-              "map_min": 0.0, "map_max": 1.0, "map_shape": [1, 1, 256, 256]}
-    (root / report_name).write_text(json.dumps(report))
     np.save(root / map_model_name, np.zeros((256, 256), dtype=np.float32))
     source = np.zeros((height, width), dtype=np.float32)
     source[100:200, 100:200] = 1.0  # one strong region for geometry
     np.save(root / map_source_name, source)
+    # Real children/workers declare the digests of the maps they wrote.
+    report = {"status": "ONE_IMAGE_INFERENCE_VERIFIED", "model_sha256": model_sha,
+              "tensor_sha256": tensor_sha, "threshold": threshold,
+              "score": 0.9, "candidate": "ANOMALY_CANDIDATE",
+              "model_forward_ms": 1.0, "process_peak_rss_kib": 1000,
+              "map_min": 0.0, "map_max": 1.0, "map_shape": [1, 1, 256, 256],
+              "map_sha256": live.sha256(root / map_model_name),
+              "source_map_sha256": live.sha256(root / map_source_name)}
+    (root / report_name).write_text(json.dumps(report))
     return report
 
 
