@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
 
-from forgesight.jetson_live_ui import LiveService
+from forgesight.jetson_live_ui import LiveService, _path_is_relative_to
 from forgesight.operation_log import operation_logger
 from forgesight.storage import InspectionStore
 
@@ -34,6 +34,11 @@ class StorageHealthTests(unittest.TestCase):
         handler.emit = self.records.append
         self.logger.addHandler(handler)
         self.addCleanup(self.logger.removeHandler, handler)
+
+    def test_path_containment_helper_supports_python38(self):
+        self.assertTrue(_path_is_relative_to(self.runs / "part_1", self.runs))
+        self.assertTrue(_path_is_relative_to(self.runs, self.runs))
+        self.assertFalse(_path_is_relative_to(self.root / "outside", self.runs))
 
     def make_run(self, name, record=None):
         folder = self.runs / name

@@ -47,6 +47,15 @@ STORAGE_SCAN_MAX_RECORD_BYTES = 1024 * 1024
 DATASET_MANIFEST_SHA256 = "14b11ebd03d5107c7ef3478e1c4d20887237e2fbef58601ac043014b8f0e340f"
 
 
+def _path_is_relative_to(path, parent):
+    """Return pathlib containment using APIs available in Python 3.8."""
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
 def vision_executable(path):
     """Make the venv path absolute without following its Python symlinks."""
     return Path(os.path.abspath(path))
@@ -744,8 +753,8 @@ class LiveService:
             # record file, or a path that resolves outside runs_root, must
             # never be opened or looked up.
             if ((folder / "result").is_symlink() or record_path.is_symlink()
-                    or not record_path.resolve().is_relative_to(
-                        Path(self.args.runs_root).resolve())):
+                    or not _path_is_relative_to(
+                        record_path.resolve(), Path(self.args.runs_root).resolve())):
                 return "invalid"
             if not record_path.is_file():
                 return "partial"
@@ -823,7 +832,7 @@ class LiveService:
             return 404, None
         path = Path(reference).resolve()
         runs_root = Path(self.args.runs_root).resolve()
-        if (not path.is_relative_to(runs_root)
+        if (not _path_is_relative_to(path, runs_root)
                 or path.suffix.lower() not in (".png", ".jpg", ".jpeg")):
             return 404, None
         if not path.is_file():
