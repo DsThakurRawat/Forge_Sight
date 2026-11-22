@@ -21,8 +21,13 @@ from tempfile import TemporaryDirectory
 from forgesight.assist_contract import prepare_advisory
 from forgesight.assist_jetson_replay_once import _generate_via_worker
 
-NOTE = ("[E1] Anomaly flagged; grade REVIEW; defect type and cause unknown. "
-        "[G1] Prototype checklist: hold for human review; check image clarity and lighting.")
+NOTE = ("An anomaly is flagged; type and cause are unknown [E1]. "
+                   "Severity HIGH, prototype pixel-response severity, not physical-damage severity. "
+                   "Anomaly score 0.682809 vs threshold 0.227766. "
+                   "Response area 9015 px across 2 regions; largest region width 139 px height 116 px "
+                   "at x 512 y 361 in the right area of the frame. "
+                   "Hold for human review; check image clarity and lighting; compare the highlighted "
+                   "region with a known-good part [G1].")
 VERIFIED = "JETSON_ADVICE_GENERATED_REQUIRES_HUMAN_REVIEW"
 
 
@@ -60,7 +65,7 @@ class WarmPathProvenanceTests(unittest.TestCase):
         self.dir = Path(self._tmp.name)
         record = deepcopy(json.loads(Path('manifests/operator_app_verification_v1.json').read_text())
                           ['browser_proof']['inspections'][1]['record'])
-        guidance = json.loads(Path('guidance/prototype_inspection_v1.json').read_text())
+        guidance = json.loads(Path('guidance/prototype_inspection_v2.json').read_text())
         self.context = prepare_advisory(record, guidance)
 
     def tearDown(self):

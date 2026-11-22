@@ -1222,7 +1222,7 @@ def main():
     parser.add_argument("--grade-policy", type=Path, default=Path("configs/forgegrade_benchmark_v1.json"))
     parser.add_argument("--dataset-manifest", type=Path, default=Path("manifests/metal_nut_v1.json"))
     parser.add_argument("--dataset-root", type=Path, default=Path("data/mvtec_ad/metal_nut"))
-    parser.add_argument("--guidance", type=Path, default=Path("guidance/prototype_inspection_v1.json"))
+    parser.add_argument("--guidance", type=Path, default=Path("guidance/prototype_inspection_v2.json"))
     parser.add_argument("--llama-worker-socket", type=Path, default=None,
                         help="Optional persistent advisory worker socket; omit for the per-request cold path")
     parser.add_argument("--llama-worker-idle-timeout-seconds", type=float, default=900,
