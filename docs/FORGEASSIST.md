@@ -67,6 +67,20 @@ The client normalizes socket timeouts so the Jetson's Python 3.8 controller
 can use its bounded worker-recovery path.
 See the [device verification](../manifests/jetson_vision_advice_v1.json).
 
+## Composed advice on the Jetson
+
+The default v5 composed note needs a saved flagged inspection WITHOUT a
+provisional assessment (an app started without the defect-type profile, or a
+plain uploaded diagnostic). From the merged tree:
+
+```sh
+/usr/bin/python3 -B -m forgesight.assist_jetson_replay_once   --record <saved replay record.json> --database <inspections.sqlite3>   --guidance guidance/prototype_inspection_v2.json   --llama-root "$HOME/.local/share/forgesight/llama_cpu_v1"   --output-dir runs/composed_advice_check_01
+```
+
+Omit `--advisory-mode` (composed is the default) or pass
+`--advisory-mode vision_choice` for the reviewed-check contract on an
+assessed record. The saved report records the selected mode.
+
 ## Earlier PC prototype
 
 The initial PC substep sent one saved inspection through ExecuTorch while

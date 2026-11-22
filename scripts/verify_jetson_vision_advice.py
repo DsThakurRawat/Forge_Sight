@@ -52,7 +52,10 @@ def verify_case(base, output, store, label, path, payload, level):
         raise RuntimeError(f"Unexpected vision result for {label}")
 
     started = monotonic()
-    submit(base, "/api/advice", b"", {})
+    # Explicit operator choice: the reviewed A/B check contract is requested
+    # by mode, never inferred from the record. Empty body would be composed.
+    submit(base, "/api/advice", json.dumps({"mode": "vision_choice"}).encode(),
+           {"Content-Type": "application/json"})
     submission_ms = (monotonic() - started) * 1000
     pending = False
 
