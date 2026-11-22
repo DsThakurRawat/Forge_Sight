@@ -149,7 +149,7 @@ def _generate_via_worker(args, context, root, report, source_mode, deadline=None
         native = worker_request(args.llama_worker_socket,
                                 {"prompt_text": context["prompt_text"],
                                  "system_text": context["system_text"],
-                                 "max_new_tokens": 64},
+                                 "max_new_tokens": context.get("max_new_tokens", 64)},
                                 timeout_seconds=timeout)
         report["controller_runtime_wall_ms"] = (time.perf_counter() - started) * 1000
         evidence = native.get("runtime_evidence") or {}
@@ -232,7 +232,8 @@ def _generate_via_subprocess(args, context, root, report, source_mode, timeout_s
                "--assets", str(model_dir / "llama3_2_1b_assets.json"),
                "--prompt", str(root / "prompt.txt"), "--system-prompt", str(root / "system.txt"),
                "--output", str(root / "native"), "--threads", "2",
-               "--max-new-tokens", "64", "--timeout", str(args.llama_timeout_seconds)]
+               "--max-new-tokens", str(context.get("max_new_tokens", 64)),
+               "--timeout", str(args.llama_timeout_seconds)]
     started = time.perf_counter()
     try:
         report["runtime_requested"] = True
@@ -288,6 +289,9 @@ def main():
     parser.add_argument("--llama-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--llama-timeout-seconds", type=float, default=240)
+    parser.add_argument("--advisory-mode", default="composed", choices=("composed", "vision_choice"),
+                        help="Advisory contract: composed v5 note (default) or reviewed A/B check "
+                             "choice for records carrying a valid provisional assessment.")
     parser.add_argument("--llama-worker-socket", type=Path, default=None,
                         help="Persistent advisory worker socket; omit for the cold subprocess path")
     parser.add_argument("--request-deadline-monotonic", type=float, default=None,
@@ -328,6 +332,7 @@ def main():
     deadline = args.request_deadline_monotonic
     report = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
               "status": "ADVICE_UNAVAILABLE", "source_mode": source_mode,
+              "advisory_mode": args.advisory_mode,
               "persistent_worker_unhealthy": False,
               "physical_part_inspected": False, "inspection_id": record["inspection_id"],
               "inspection_sha256": canonical_hash(record), "inspection_file_sha256": sha256(args.record),
@@ -339,7 +344,7 @@ def main():
               "inspection_and_sqlite_unchanged": False, "async_queue_implemented": False,
               "offline_disconnection_verified": False}
     try:
-        context = prepare_advisory(record, guidance)
+        context = prepare_advisory(record, guidance, mode=args.advisory_mode)
     except AdvisoryRefusal as error:
         report["input_refusal"] = {"code": error.code, "message": str(error)}
         context = None

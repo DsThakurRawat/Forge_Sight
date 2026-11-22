@@ -2,6 +2,41 @@
 
 ## Current stage
 
+The classifier, provisional severity and vision-choice advisory are integrated
+with the composed v5 advisory contract on main: v5 stays the default, the A/B
+mode is explicit-only, and records carrying an assessment must be routed
+explicitly. The displayed severity remains the policy-cutoff pixel-response
+label with its prototype qualifier; type-conditioned severity is shown only as
+clearly scoped provisional metadata. All Jetson evidence below predates this
+integration, so a fresh on-device run of the combined build is pending.
+
+ForgeAssist receives type, severity, location and response extent from saved
+benchmark inspections. In an offline Jetson check, the ExecuTorch worker
+selected a concrete inspection check for each of the four defect types and
+an unknown case. See [the advisory workflow and verification](FORGEASSIST.md).
+
+The four-type profile supplies deterministic provisional severity from response
+extent and approximate nut location. The frozen 24-image benchmark yielded
+five Low, six Medium, one High, seven Unassessed and five unflagged results.
+Five of the Unassessed results were orientation issues. The offline Jetson
+app matched the PC on all 28 uploads and replays and saved each severity
+assessment in SQLite. See
+[severity rules and verification](DEFECT_SEVERITY.md).
+
+The opt-in four-type forest classified 17 of 19 defective MVTec test images,
+with two unknowns and all five good images unflagged. Each defect type had
+correct predictions. The isolated Jetson reproduced the PC results on all 24 images.
+Discoloration coverage fell from four to three of four.
+[Four-type results and usage](DEFECT_TYPE.md).
+
+**Previous depth-3 defect-type tree trained within MVTec.** The same 24-image test gave
+the tree one correct scratch and four correct discoloration labels. The color
+rule gave zero and four, respectively, and made two wrong type assignments.
+The tree abstained on four flagged scratches. The scope is provisional saved
+benchmark images. The isolated Jetson comparison reproduced all 48 PC profile
+outcomes and measured tree-assessment p50/p95 of 6.4/34.9 ms. See
+[defect type](DEFECT_TYPE.md).
+
 **Merged CPU vision and persistent ExecuTorch advice VERIFIED for one saved
 image on the Jetson at `ca499bd`.** Inspection work took 2.337 s (model forward
 1.768 s); the first advisory worker request took 5.311 s, including reported

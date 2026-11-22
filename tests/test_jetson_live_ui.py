@@ -77,8 +77,8 @@ class StubService:
     def upload_diagnostic(self, upload_id, data, benchmark=False):
         self.requests.append(("diagnostic", upload_id, data, benchmark))
 
-    def request_advice(self):
-        self.requests.append(("advice",))
+    def request_advice(self, advisory_mode="composed"):
+        self.requests.append(("advice", advisory_mode))
         return "PENDING"
 
     def manual_review(self, inspection_id, actor, outcome, reason):
@@ -302,12 +302,17 @@ class LiveHttpTests(unittest.TestCase):
         request = Request(self.base + "/api/advice", method="POST", data=b"",
                           headers={"Origin": self.base})
         self.assertEqual(urlopen(request).status, 202)
-        self.assertEqual(self.service.requests[-1], ("advice",))
+        self.assertEqual(self.service.requests[-1], ("advice", "composed"))
         request = Request(self.base + "/api/advice", method="POST", data=b"x",
                           headers={"Origin": self.base})
         with self.assertRaises(HTTPError) as rejected:
             urlopen(request)
         self.assertEqual(rejected.exception.code, 400)
+        body = json.dumps({"mode": "vision_choice"}).encode()
+        request = Request(self.base + "/api/advice", method="POST", data=body,
+                          headers={"Origin": self.base, "Content-Type": "application/json"})
+        self.assertEqual(urlopen(request).status, 202)
+        self.assertEqual(self.service.requests[-1], ("advice", "vision_choice"))
 
     def test_manual_review_route_requires_same_origin_and_bounded_json(self):
         self.assertIn(b'id="review-submit"', urlopen(self.base).read())
@@ -401,7 +406,7 @@ class RefusalSupportIdTests(unittest.TestCase):
         self.assertRegex(body.get("support_id", ""), r"^[0-9a-f]{8}$")
 
     def test_advice_refusal_carries_support_id(self):
-        def refuse():
+        def refuse(advisory_mode="composed"):
             raise ValueError("Llama advice is available after a flagged result")
         self.service.request_advice = refuse
         request = Request(self.base + "/api/advice", method="POST", data=b"",
@@ -414,7 +419,7 @@ class RefusalSupportIdTests(unittest.TestCase):
 
 
     def test_advice_internal_type_error_is_500_not_disconnect(self):
-        def broken():
+        def broken(advisory_mode="composed"):
             raise TypeError("unexpected None in advice path")
         self.service.request_advice = broken
         request = Request(self.base + "/api/advice", method="POST", data=b"",

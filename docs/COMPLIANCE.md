@@ -2,6 +2,24 @@
 
 No challenge requirement is marked satisfied by repository setup alone.
 
+The optional benchmark subtype profile produced a provisional color cue on
+the physical Jetson in a loopback-only application namespace. Six paired
+inspections preserved exact detector scores, source maps, overlays, and
+ForgeGrade decisions. The frozen detector missed the scratch preview.
+Independent type accuracy and physical-camera subtype validation remain open.
+The classifier split repartitions the detector's 111-image frozen final
+holdout (66/21/24), and the same 24-image test has evaluated successive
+classifier candidates; detector metrics are unchanged, but classifier numbers
+are provisional until confirmed on fresh images.
+See [defect-type evidence and commands](DEFECT_TYPE.md).
+
+The within-MVTec depth-3 tree reproduced the PC type outputs on the isolated
+Jetson. It labeled one of five test scratches and four of four discoloration
+images correctly, with no wrong type assignments and fourteen abstentions.
+The test used a separate subtype split of images already scored by EfficientAD.
+Reliable scratch coverage and physical-camera subtype accuracy remain open.
+See the [Jetson tree comparison](../manifests/jetson_mvtec_defect_type_tree_v1.json).
+
 Stage 10.7 measured eight repeated, fresh-process Llama advisories through
 ExecuTorch while Jetson Wi-Fi was disconnected. Every note passed the local
 evidence contract; the saved REVIEW inspection and SQLite file were unchanged.

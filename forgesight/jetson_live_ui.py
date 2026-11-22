@@ -21,6 +21,7 @@ from PIL import Image
 from forgesight.assist_display import advice_for
 from forgesight.assist_queue import AdvisoryQueue
 from forgesight.operation_log import configure_operation_log, operation_logger, scrub
+from forgesight.defect_type import load_profile
 from forgesight.storage import InspectionStore, new_correction
 from forgesight.vision_edge_live_once import (
     CHILD_TIMEOUT_SECONDS, MODEL_SHA256, WORKER_REQUEST_TIMEOUT_SECONDS, sha256)
@@ -314,6 +315,8 @@ class LiveService:
     def __init__(self, args, camera):
         self.args = args
         self.camera = camera
+        profile_path = getattr(args, "defect_type_profile", None)
+        self.defect_type_profile = load_profile(profile_path) if profile_path else None
         if not args.vision_python.is_file() or sha256(args.model) != MODEL_SHA256:
             raise ValueError("Jetson vision runtime or frozen model is missing/mismatched")
         if not args.grade_policy.is_file():
@@ -385,6 +388,7 @@ class LiveService:
             camera_index=self.args.camera_index,
             vision_worker_socket=self.args.vision_worker_socket,
             overlay_format=self.args.overlay_format,
+            defect_type_profile=getattr(self, "defect_type_profile", None),
             **mode_flags)
         record = live_once.inspect(args)
 
@@ -627,7 +631,16 @@ class LiveService:
         for key in completed[:-ADVICE_FUTURES_COMPLETED_KEPT]:
             self.advice_futures.pop(key, None)
 
-    def request_advice(self):
+    def request_advice(self, advisory_mode="composed"):
+        # The advisory contract is an explicit operator choice per request.
+        # The defect-type profile only gates AVAILABILITY of the reviewed
+        # A/B check contract; the record's contents never select the mode.
+        if advisory_mode not in ("composed", "vision_choice"):
+            raise ValueError("Unknown advisory mode.")
+        if (advisory_mode == "vision_choice"
+                and not getattr(self.args, "defect_type_profile", None)):
+            raise ValueError(
+                "Reviewed-check advice requires starting the app with a defect-type profile.")
         with self.lock:
             latest, root = self.latest, self.latest_root
             if (not self.llama_ready or self.busy or not latest
@@ -643,6 +656,23 @@ class LiveService:
             if (record["inspection_id"] != latest["inspection_id"]
                     or self.store.get_inspection(record["inspection_id"]) != record):
                 raise ValueError("Inspection record does not match SQLite")
+            # Early, explicit eligibility checks so the operator gets a clear
+            # refusal instead of a spawned attempt that fails. These validate
+            # the chosen contract; they never switch it.
+            from forgesight.assist_vision import vision_context
+            assessment = record.get("assessment")
+            if advisory_mode == "composed" and assessment is not None:
+                raise ValueError(
+                    "This inspection carries a provisional defect assessment, "
+                    "which composed advice refuses. Choose the reviewed-check "
+                    "mode explicitly if that is what you want.")
+            if advisory_mode == "vision_choice" and (
+                    not isinstance(assessment, dict)
+                    or assessment.get("scope") != "PROVISIONAL_BENCHMARK_IMAGE"
+                    or vision_context(record) is None):
+                raise ValueError(
+                    "Reviewed-check advice requires a valid provisional "
+                    "benchmark assessment on this inspection.")
             output = self.advice_root / record["inspection_id"]
             pending = self.advice_futures.get(record["inspection_id"])
             if pending is not None and not pending.done():
@@ -688,6 +718,10 @@ class LiveService:
                        # time count against the shared budget too.
                        "--request-deadline-monotonic",
                        str(time.monotonic() + self.args.llama_timeout_seconds + 45)]
+            # The operator's explicit per-request choice is passed through
+            # verbatim; the contract itself still refuses an invalid
+            # assessment in vision_choice and an assessed record in composed.
+            command += ["--advisory-mode", advisory_mode]
             if getattr(self.args, "llama_worker_socket", None) is not None:
                 if self.advice_worker is not None and self.advice_worker.poll() is None:
                     command += ["--llama-worker-socket", str(self.args.llama_worker_socket)]
@@ -717,12 +751,14 @@ class LiveService:
                    if latest and latest.get("inspection_id") else [])
         return {"camera": self.camera.state(), "busy": busy, "latest": latest,
                 "manual_reviews": reviews,
+                "vision_advice_available": bool(getattr(self.args, "defect_type_profile", None)),
                 "advice": self.advice_state(),
                 "replay_samples": sorted(self.replay_samples),
                 "local_replay_samples": self.local_replay_samples,
                 "history": [{"part_id": r["part_id"], "inspection_id": r["inspection_id"],
                              "source_mode": r["source"]["mode"],
                              "grade": r["decision"]["grade"], "status": r["status"],
+                             "assessment": r.get("assessment"),
                              "timestamp_utc": r["timestamp_utc"]}
                             for r in self.store.history(limit=10)],
                 "storage": self.storage_health()}
@@ -994,6 +1030,8 @@ class LiveService:
                        "--database", str(self.args.database),
                        "--output-dir", str(root / "result"),
                        "--mvtec-benchmark-upload" if benchmark else "--uploaded-image-diagnostic"]
+            if benchmark and getattr(self.args, "defect_type_profile", None):
+                command += ["--defect-type-profile", str(self.args.defect_type_profile)]
             if self.args.vision_worker_socket is not None:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
             result = subprocess.run(command, capture_output=True, text=True, timeout=VISION_OUTER_TIMEOUT_SECONDS)
@@ -1021,6 +1059,8 @@ class LiveService:
                        "--grade-policy", str(self.args.grade_policy),
                        "--database", str(self.args.database),
                        "--output-dir", str(root / "result")]
+            if getattr(self.args, "defect_type_profile", None):
+                command += ["--defect-type-profile", str(self.args.defect_type_profile)]
             if self.args.vision_worker_socket is not None:
                 command += ["--vision-worker-socket", str(self.args.vision_worker_socket)]
             result = subprocess.run(command, capture_output=True, text=True, timeout=VISION_OUTER_TIMEOUT_SECONDS)
@@ -1055,6 +1095,7 @@ class LiveService:
                       "inspection_id": record["inspection_id"], "grade": record["decision"]["grade"],
                       "reason": record["decision"]["reason"],
                       "action": record["decision"]["operator_action"],
+                      "assessment": record.get("assessment"),
                       "score": record["score"], "candidate": record["candidate"],
                       "threshold": record["model"]["image_threshold"],
                       "response_area_px": (record["geometry"] or {}).get("total_area_px"),
@@ -1213,11 +1254,20 @@ def handler_for(service):
                 self.send(200, json.dumps(service.camera.state()).encode(), "application/json")
                 return
             if self.path == "/api/advice":
-                if self.headers.get("Content-Length", "0") != "0":
-                    self.send(400, b"Invalid request", "text/plain")
-                    return
+                advisory_mode = "composed"
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                if length:
+                    if length > 1024:
+                        self.send(400, b"Invalid request", "text/plain")
+                        return
+                    try:
+                        body = json.loads(self.rfile.read(length))
+                        advisory_mode = body["mode"]
+                    except (ValueError, TypeError, KeyError, AttributeError):
+                        self.send(400, b"Invalid request", "text/plain")
+                        return
                 try:
-                    status = service.request_advice()
+                    status = service.request_advice(advisory_mode)
                 except ValueError as error:
                     code, body = _refusal_body("/api/advice", error, safe=True)
                     self.send(code, body.encode(), "application/json")
@@ -1315,6 +1365,8 @@ def main():
     parser.add_argument("--grade-policy", type=Path, default=Path("configs/forgegrade_benchmark_v1.json"))
     parser.add_argument("--dataset-manifest", type=Path, default=Path("manifests/metal_nut_v1.json"))
     parser.add_argument("--dataset-root", type=Path, default=Path("data/mvtec_ad/metal_nut"))
+    parser.add_argument("--defect-type-profile", type=Path,
+                        help="Enable provisional defect assessment for benchmark images.")
     parser.add_argument("--guidance", type=Path, default=Path("guidance/prototype_inspection_v2.json"))
     parser.add_argument("--llama-worker-socket", type=Path, default=None,
                         help="Optional persistent advisory worker socket; omit for the per-request cold path")

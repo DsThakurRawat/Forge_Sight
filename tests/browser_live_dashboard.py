@@ -205,6 +205,56 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(self.page.locator('#advice-note')).to_be_hidden()
         expect(self.page.locator('#grade')).to_have_text('REJECT')
 
+    def test_severity_displays_in_current_result_and_history(self):
+        self.state['latest']['inspection_id'] = 'fixture-scratch-medium'
+        self.state['latest']['assessment'] = dict(defect_type='scratch', severity=dict(level='MEDIUM'))
+        self.state['history'] = [dict(self.state['latest'], timestamp_utc='2026-11-22T00:00:00Z')]
+        self.refresh()
+        expect(self.page.locator('#defect-assessment')).to_be_visible()
+        expect(self.page.locator('#defect-assessment')).to_contain_text('Provisional severity: Medium')
+        expect(self.page.locator('#history')).to_contain_text('Provisional severity: Medium')
+        self.state['latest']['inspection_id'] = 'fixture-flip-unassessed'
+        self.state['latest']['assessment'] = dict(defect_type='flip',
+            severity=dict(level='UNASSESSED', reason='ORIENTATION_ISSUE'))
+        self.refresh()
+        expect(self.page.locator('#defect-assessment')).to_contain_text('Orientation issue · Severity unassessed')
+        self.state['latest']['inspection_id'] = 'fixture-older-record'
+        self.state['latest']['assessment'] = dict(defect_type='scratch')
+        self.refresh()
+        expect(self.page.locator('#defect-assessment')).to_have_text('Possible scratch (provisional)')
+
+    def test_vision_grounded_check_displays_with_existing_grade(self):
+        self.state['advice'] = dict(status='GENERATED_REQUIRES_HUMAN_REVIEW', advisory=dict(
+            note='Check the highlighted line under angled light. [E1][G3]',
+            note_origin='LLAMA_SELECTED_REVIEWED_CHECK'))
+        self.refresh()
+        expect(self.page.locator('#advice-status')).to_contain_text('Llama-selected check')
+        expect(self.page.locator('#advice-note')).to_have_text(
+            'Check the highlighted line under angled light. [E1][G3]')
+        expect(self.page.locator('#grade')).to_have_text('REJECT')
+
+    def test_type_aware_check_is_an_explicit_operator_choice(self):
+        # Hidden without the profile-gated availability flag from the server.
+        expect(self.page.locator('#advice-vision-request')).to_be_hidden()
+        self.state['vision_advice_available'] = True
+        self.refresh()
+        button = self.page.locator('#advice-vision-request')
+        expect(button).to_be_visible()
+        expect(button).to_be_enabled()
+        # The composed default posts no mode; the operator's A/B choice posts
+        # its mode explicitly. Neither reads the record to pick a contract.
+        self.page.locator('#advice-request').click()
+        self.assertEqual(len(self.posts), 1)
+        path, body, _ = self.posts[0]
+        self.assertEqual(path, '/api/advice')
+        self.assertFalse(body)
+        self.posts.clear()
+        button.click()
+        self.assertEqual(len(self.posts), 1)
+        path, body, _ = self.posts[0]
+        self.assertEqual(path, '/api/advice')
+        self.assertEqual(json.loads(body), {'mode': 'vision_choice'})
+
     def test_image_failure_has_placeholder_and_retains_grade(self):
         self.bad_media.add('/api/inspection/fixture-new/overlay.png')
         self.state['latest']['inspection_id'] = 'fixture-new'

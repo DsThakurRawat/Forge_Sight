@@ -18,6 +18,7 @@ let historySignature = '';
 let reviewSignature = '';
 let cameraReady = false;
 let cameraRunning = false;
+let visionAdviceAvailable = false;
 let cameraControlPending = false;
 let busy = false;
 let currentLatest = null;
@@ -44,6 +45,9 @@ function updateButton() {
   // earlier report aside and starts a fresh attempt.
   byId('advice-request').disabled = locked || !eligible ||
     !['NOT_REQUESTED', 'ADVICE_UNAVAILABLE'].includes(adviceState?.status);
+  byId('advice-vision-request').hidden = !visionAdviceAvailable;
+  byId('advice-vision-help').hidden = !visionAdviceAvailable;
+  byId('advice-vision-request').disabled = byId('advice-request').disabled;
   byId('inspect').textContent = busy ? 'Inspection in progress…' : 'Capture & analyze';
   byId('diagnostic-submit').textContent = busy ? 'Inspection in progress…' : 'Analyze uploaded PNG';
   for (const form of ['capture-form', 'upload-form', 'review-form']) {
@@ -98,6 +102,7 @@ async function refreshState() {
   const epoch = commandEpoch;
   try {
     const state = await requestJSON('/api/state');
+    visionAdviceAvailable = state.vision_advice_available === true;
     // A state request begun before a user action must not undo its UI lock.
     if (epoch !== commandEpoch) return;
     connected = true;
@@ -218,7 +223,10 @@ function renderAdvice(advice) {
     ADVICE_UNAVAILABLE: 'Llama advice was unavailable. The inspection grade is unchanged. You can try again.',
     GENERATED_REQUIRES_HUMAN_REVIEW: 'Generated operator note · human review required.'
   };
-  byId('advice-status').textContent = labels[status] || 'Llama advice status is unknown.';
+  byId('advice-status').textContent = status === 'GENERATED_REQUIRES_HUMAN_REVIEW' &&
+    advice?.advisory?.note_origin === 'LLAMA_SELECTED_REVIEWED_CHECK'
+    ? 'Llama-selected check · human review required.'
+    : labels[status] || 'Llama advice status is unknown.';
   const runtime = advice?.llama_runtime === 'PERSISTENT_WORKER'
     ? 'Warm worker: the model stays loaded between notes.'
     : (advice?.llama_runtime || '').includes('COLD')
@@ -302,6 +310,9 @@ function renderLatest(item, processing) {
     ? 'Camera setup not calibrated (CAMERA_DOMAIN_UNVALIDATED)'
     : item.reason || (item.error && (item.error.message || item.error)) || 'Inspection could not complete';
   byId('action').textContent = item.action || (item.status === 'ERROR' ? 'Check the analysis error and input image before trying again.' : 'No operator action was provided. Review the inspection evidence.');
+  const assessment = byId('defect-assessment');
+  assessment.hidden = !item.assessment;
+  assessment.textContent = assessmentLabel(item.assessment);
   byId('inspection-id').textContent = item.inspection_id ? 'Inspection ID: ' + item.inspection_id : '';
   clearMedia(item.status === 'ANALYZED' ? 'Loading saved image…' : 'No response map is available for this failed inspection.');
   if (item.status === 'ANALYZED') {
@@ -316,6 +327,22 @@ function renderLatest(item, processing) {
     byId('source-link').href = media + '/source.png' + stamp;
     selectView(savedView);
   }
+}
+
+function assessmentLabel(assessment) {
+  if (!assessment) return '';
+  const names = new Map([
+    ['discoloration', 'Possible discoloration (provisional)'],
+    ['bent', 'Possible bent nut (provisional)'],
+    ['flip', 'Possible flipped nut (provisional)'],
+    ['scratch', 'Possible scratch (provisional)'],
+  ]);
+  const label = names.get(assessment.defect_type) || 'Defect type unknown';
+  const severity = assessment.severity;
+  if (!severity) return label;
+  if (severity.reason === 'ORIENTATION_ISSUE') return label + ' · Orientation issue · Severity unassessed';
+  const levels = {LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High'};
+  return label + (levels[severity.level] ? ' · Provisional severity: ' + levels[severity.level] : ' · Severity unassessed');
 }
 
 function renderHistory(rows) {
@@ -342,6 +369,8 @@ function renderHistory(rows) {
     const grade = document.createElement('span');
     grade.className = 'history-meta';
     grade.textContent = (row.source_mode === 'USER_DECLARED_MVTEC_METAL_NUT_UPLOAD' ? 'BENCHMARK · ' : row.source_mode === 'USER_UPLOADED_IMAGE_DIAGNOSTIC' ? 'USER PNG · ' : row.source_mode === 'SAVED_IMAGE_REPLAY' ? 'DATASET REPLAY · ' : row.source_mode === 'LIVE_CAMERA_SCREEN_PHOTO_DIAGNOSTIC' ? 'SCREEN PHOTO · ' : '') + row.status;
+    const defect = assessmentLabel(row.assessment);
+    if (defect) grade.textContent += ' · ' + defect;
     decision.append(badge, grade);
     line.append(name, details, decision);
     list.append(line);
@@ -445,6 +474,14 @@ byId('advice-request').addEventListener('click', () => {
   byId('advice-status').textContent = 'Requesting on-device Llama advice…';
   submitAction('advice-request', 'advice-status', '/api/advice', {method: 'POST'},
     () => { byId('advice-status').textContent = 'Llama is generating through ExecuTorch…'; });
+});
+
+byId('advice-vision-request').addEventListener('click', () => {
+  if (byId('advice-vision-request').disabled) return;
+  byId('advice-status').textContent = 'Requesting a reviewed type-aware check…';
+  submitAction('advice-vision-request', 'advice-status', '/api/advice',
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode: 'vision_choice'})},
+    () => { byId('advice-status').textContent = 'Llama is choosing a reviewed check…'; });
 });
 
 byId('review-form').addEventListener('submit', event => {

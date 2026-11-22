@@ -621,6 +621,115 @@ class UiRecoveryTests(unittest.TestCase):
         service.advice_queue.close()
 
 
+class AdvisoryModeSelectionTests(unittest.TestCase):
+    """The advisory contract is an explicit operator choice per request: the
+    defect-type profile only gates availability of the reviewed A/B check
+    contract, and the record's contents never select the mode."""
+
+    def service(self, profile, record=None):
+        from forgesight.jetson_live_ui import LiveService
+        from forgesight.assist_queue import AdvisoryQueue
+        from threading import Lock
+        with mock.patch.object(LiveService, "__init__", lambda self, *a, **k: None):
+            service = LiveService()
+        service.args = argparse.Namespace(
+            database=Path("db.sqlite3"), guidance=Path("guidance.json"),
+            llama_root=Path("/llama"), llama_timeout_seconds=240,
+            llama_worker_socket=None, defect_type_profile=profile)
+        service.llama_ready = True
+        service.advice_worker = None
+        service.advice_worker_boot_error = None
+        service.advice_queue = AdvisoryQueue()
+        service.advice_futures = {}
+        service.lock = Lock()
+        service.busy = False
+        service.advice_root = Path(tempfile.mkdtemp())
+        root = Path(tempfile.mkdtemp())
+        if record is None:
+            record = {"inspection_id": "insp-1", "status": "ANALYZED",
+                      "candidate": "ANOMALY_CANDIDATE",
+                      "source": {"mode": "USER_UPLOADED_IMAGE_DIAGNOSTIC"}}
+        (root / "record.json").write_text(json.dumps(record))
+        service.latest = {**record, "source_mode": record["source"]["mode"]}
+        service.latest_root = root
+        service.store = mock.Mock()
+        service.store.get_inspection.return_value = record
+        return service
+
+    def assessed_record(self):
+        from forgesight.defect_severity import assess_severity
+        row = json.loads(Path("manifests/operator_app_verification_v1.json")
+                         .read_text())["browser_proof"]["inspections"][1]["record"]
+        row["source"].update(mode="SAVED_IMAGE_REPLAY", physical_part=False)
+        row["assessment"] = {
+            "schema_version": 1, "scope": "PROVISIONAL_BENCHMARK_IMAGE",
+            "method": "four_type_forest", "defect_type": "scratch",
+            "severity": assess_severity("scratch", row["geometry"], (500, 250_000))}
+        return row
+
+    def command_for(self, profile, mode="composed", record=None):
+        service = self.service(profile, record)
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                status = service.request_advice(mode)
+                self.assertEqual(status, "PENDING")
+                inspection_id = service.latest["inspection_id"]
+                service.advice_futures[inspection_id].result(timeout=10)
+            return run.call_args.args[0]
+        finally:
+            service.advice_queue.close()
+
+    def test_default_request_is_explicitly_composed(self):
+        command = self.command_for(profile="configs/defect_type_mvtec_four_v1.json")
+        self.assertEqual(command[command.index("--advisory-mode") + 1], "composed")
+
+    def test_operator_can_choose_vision_choice_when_profile_loaded(self):
+        command = self.command_for(profile="configs/defect_type_mvtec_four_v1.json",
+                                   mode="vision_choice", record=self.assessed_record())
+        self.assertEqual(command[command.index("--advisory-mode") + 1], "vision_choice")
+
+    def test_vision_choice_refused_for_record_without_assessment(self):
+        service = self.service(profile="configs/defect_type_mvtec_four_v1.json")
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                with self.assertRaises(ValueError):
+                    service.request_advice("vision_choice")
+            run.assert_not_called()
+        finally:
+            service.advice_queue.close()
+
+    def test_composed_refused_for_assessed_record(self):
+        service = self.service(profile="configs/defect_type_mvtec_four_v1.json",
+                               record=self.assessed_record())
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                with self.assertRaises(ValueError):
+                    service.request_advice("composed")
+            run.assert_not_called()
+        finally:
+            service.advice_queue.close()
+
+    def test_vision_choice_refused_without_profile(self):
+        service = self.service(profile=None)
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                with self.assertRaises(ValueError):
+                    service.request_advice("vision_choice")
+            run.assert_not_called()
+        finally:
+            service.advice_queue.close()
+
+    def test_unknown_mode_refused(self):
+        service = self.service(profile="configs/defect_type_mvtec_four_v1.json")
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                with self.assertRaises(ValueError):
+                    service.request_advice("autopilot")
+            run.assert_not_called()
+        finally:
+            service.advice_queue.close()
+
+
 class AdviceFuturesBoundTest(unittest.TestCase):
     """LiveService.advice_futures grew by one entry per inspection forever."""
 
