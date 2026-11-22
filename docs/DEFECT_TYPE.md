@@ -32,6 +32,16 @@ It was excluded from fitting and vote-threshold selection, and has been
 evaluated previously. Validation included one scratch predicted as bent.
 Discoloration coverage fell from 4/4 with the earlier tree to 3/4. The
 four-type profile stays opt-in under the existing promotion criterion.
+
+Threat limit: an assessment stored on a saved inspection is validated for
+shape and consistency when used, but it is not independently re-derived from
+the image at display time. Someone with write access to a stored record
+could replace an assessment with a different valid-looking one (for example
+a type that yields an unassessed severity) without detection. The
+authoritative grade, detector score and severity evidence are unaffected -
+they are recomputed from the record and contradicting evidence fails closed -
+but the provisional type label alone carries no tamper-evident provenance
+guarantee.
 The isolated Orin Nano app reproduced all 48 expected outcomes (24 per profile).
 Scores, maps, overlays and grade agreed across paired runs. Current result,
 history and SQLite agreed. Four-type assessment on 19 flagged images took
