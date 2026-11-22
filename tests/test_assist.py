@@ -20,7 +20,13 @@ class AssistContractTests(unittest.TestCase):
         self.record = deepcopy(json.loads(Path('manifests/operator_app_verification_v1.json').read_text())['browser_proof']['inspections'][1]['record'])
         self.guidance = json.loads(DEFAULT_GUIDANCE.read_text())
         self.context = prepare_advisory(self.record, self.guidance)
-        self.valid = 'An anomaly is flagged; type and cause are unknown. Hold for human review and check image clarity and lighting [E1][G1].'
+        self.valid = ("An anomaly is flagged; type and cause are unknown [E1]. "
+        "Severity HIGH, prototype pixel-response severity, not physical-damage severity. "
+        "Anomaly score 0.682809 vs threshold 0.227766. "
+        "Response area 9015 px across 2 regions; largest region width 139 px height 116 px "
+        "at x 512 y 361 in the right area of the frame. "
+        "Hold for human review; check image clarity and lighting; compare the highlighted "
+        "region with a known-good part [G1].")
 
     def test_deterministic_compact_context_and_unchanged_decision(self):
         original = deepcopy(self.record)
@@ -61,8 +67,10 @@ class AssistContractTests(unittest.TestCase):
         context = prepare_advisory(row, self.guidance)
         self.assertEqual(context['authoritative_decision']['grade'], 'REJECT')
         self.assertIn('[G2]', context['prompt_text'])
-        note = ('An anomaly is flagged; type and cause are unknown. Hold the provisional '
-                'benchmark result for human review and check image clarity and lighting [E1][G2].')
+        note = ('An anomaly is flagged; type and cause are unknown [E1]. Severity HIGH. '
+                'Anomaly score 0.600000. Hold the provisional benchmark result for human review; '
+                'check image clarity and lighting; compare the highlighted region with a '
+                'known-good part [G2].')
         self.assertEqual(parse_advisory(note, context)['authoritative_grade'], 'REJECT')
         with self.assertRaises(ValueError):
             parse_advisory('[E1] Anomaly flagged; grade REVIEW; defect type and cause unknown. '
@@ -96,8 +104,10 @@ class AssistContractTests(unittest.TestCase):
         self.assertEqual(result['status'],'GENERATED_REQUIRES_HUMAN_REVIEW')
         self.assertEqual(result['guidance_approval'],'PROTOTYPE_NOT_FACTORY_APPROVED')
         self.assertEqual(result['quality_grade_authority'],'DETERMINISTIC_RULES_ONLY')
-        source_style = '[E1] Anomaly flagged; grade REVIEW; defect type and cause unknown. [G1] Prototype checklist: Hold for human review; check image clarity and lighting.'
-        self.assertEqual(parse_advisory(source_style,self.context)['response']['possible_explanation'], None)
+        with self.assertRaises(ValueError):
+            parse_advisory('An anomaly is flagged; type and cause are unknown. '
+                           'Hold for human review and check image clarity and lighting [E1][G1].',
+                           self.context)
 
     def test_bad_format_wrong_citations_and_missing_checks_are_rejected(self):
         invalids=['{', '```json\n{}\n```', 'Here is advice', '{"grade":"PASS"}']
@@ -138,7 +148,7 @@ class AssistContractTests(unittest.TestCase):
                       'The defect type is lighting; cause unknown.',
                       'The type is unknown; the cause is lighting.']:
             raw = claim + ' Hold for human review and check image clarity [E1][G1].'
-            with self.subTest(claim=claim), self.assertRaisesRegex(ValueError, 'reviewed statement forms'):
+            with self.subTest(claim=claim), self.assertRaises(ValueError):
                 parse_advisory(raw, self.context)
 
     def test_guidance_identity_cannot_authorize_changed_content(self):
@@ -174,7 +184,7 @@ class AssistContractTests(unittest.TestCase):
             with patch('forgesight.assist_once.capture_process', side_effect=AssertionError('No worker allowed')):
                 report = evaluate(DEFAULT_PROTOCOL, output)
             self.assertTrue(report['passed'])
-            self.assertEqual(report['checks_executed'], 27)
+            self.assertEqual(report['checks_executed'], 29)
             self.assertEqual(report['completed_native_generations'], 0)
             self.assertEqual(report['runtime_cases'], [])
             self.assertFalse(report['general_advisory_usefulness_verified'])
