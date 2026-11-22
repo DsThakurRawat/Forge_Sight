@@ -1,6 +1,7 @@
 """Storage/transaction fixtures are not new model or industrial acceptance evidence."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -36,7 +37,7 @@ class StorageTests(unittest.TestCase):
         expected = self.fixture()
         self.assertTrue(self.store.save_inspection(expected))
         self.assertEqual(self.store.get_inspection(expected['inspection_id']), expected)
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute('PRAGMA user_version').fetchone()[0], 1)
             self.assertEqual(connection.execute('PRAGMA application_id').fetchone()[0], APPLICATION_ID)
         checks = self.store.integrity()
@@ -118,7 +119,7 @@ class StorageTests(unittest.TestCase):
     def test_rollback_and_immutability_guards(self):
         record = self.fixture()
         self.store.save_inspection(record)
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection:
             for sql in ['UPDATE inspections SET grade = ?', 'DELETE FROM inspections']:
                 with self.assertRaises(sqlite3.IntegrityError):
                     connection.execute(sql, ('REJECT',) if '?' in sql else ())
@@ -163,7 +164,7 @@ class StorageTests(unittest.TestCase):
     def test_refuse_foreign_unversioned_and_future_databases_without_changing_them(self):
         for kind in ['foreign', 'future', 'unversioned']:
             path = self.root/(kind+'.sqlite3')
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection:
                 connection.execute('CREATE TABLE private_data(value TEXT)')
                 connection.execute("INSERT INTO private_data VALUES ('preserve')")
                 if kind == 'future':
