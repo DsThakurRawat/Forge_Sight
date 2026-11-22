@@ -67,6 +67,8 @@
         <div class="panel-head"><div><h2 id="advice-title">Llama operator note</h2><p>On-device ExecuTorch · separate advisory</p></div><span class="section-label">ASSIST</span></div>
         <p id="advice-status" role="status" aria-live="polite">Analyze an image to see whether advice is available.</p>
         <button id="advice-request" class="secondary" type="button" disabled>Generate Llama advice</button>
+        <button id="advice-vision-request" class="secondary" type="button" disabled hidden>Choose a reviewed check instead</button>
+        <p id="advice-vision-help" class="help" hidden>Type-aware mode: the model only picks between two reviewed inspection checks for the provisional defect type. Available because this app was started with a defect-type profile.</p>
         <p id="advice-note" hidden></p>
         <p class="help">Review this note before acting. It cannot change the saved grade or identify a confirmed defect cause.</p>
         <details class="technical-details"><summary>Advisory runtime</summary><p id="advice-runtime">Waiting for station status.</p></details>

@@ -18,6 +18,7 @@ let historySignature = '';
 let reviewSignature = '';
 let cameraReady = false;
 let cameraRunning = false;
+let visionAdviceAvailable = false;
 let cameraControlPending = false;
 let busy = false;
 let currentLatest = null;
@@ -44,6 +45,9 @@ function updateButton() {
   // earlier report aside and starts a fresh attempt.
   byId('advice-request').disabled = locked || !eligible ||
     !['NOT_REQUESTED', 'ADVICE_UNAVAILABLE'].includes(adviceState?.status);
+  byId('advice-vision-request').hidden = !visionAdviceAvailable;
+  byId('advice-vision-help').hidden = !visionAdviceAvailable;
+  byId('advice-vision-request').disabled = byId('advice-request').disabled;
   byId('inspect').textContent = busy ? 'Inspection in progress…' : 'Capture & analyze';
   byId('diagnostic-submit').textContent = busy ? 'Inspection in progress…' : 'Analyze uploaded PNG';
   for (const form of ['capture-form', 'upload-form', 'review-form']) {
@@ -98,6 +102,7 @@ async function refreshState() {
   const epoch = commandEpoch;
   try {
     const state = await requestJSON('/api/state');
+    visionAdviceAvailable = state.vision_advice_available === true;
     // A state request begun before a user action must not undo its UI lock.
     if (epoch !== commandEpoch) return;
     connected = true;
@@ -469,6 +474,14 @@ byId('advice-request').addEventListener('click', () => {
   byId('advice-status').textContent = 'Requesting on-device Llama advice…';
   submitAction('advice-request', 'advice-status', '/api/advice', {method: 'POST'},
     () => { byId('advice-status').textContent = 'Llama is generating through ExecuTorch…'; });
+});
+
+byId('advice-vision-request').addEventListener('click', () => {
+  if (byId('advice-vision-request').disabled) return;
+  byId('advice-status').textContent = 'Requesting a reviewed type-aware check…';
+  submitAction('advice-vision-request', 'advice-status', '/api/advice',
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode: 'vision_choice'})},
+    () => { byId('advice-status').textContent = 'Llama is choosing a reviewed check…'; });
 });
 
 byId('review-form').addEventListener('submit', event => {

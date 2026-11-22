@@ -631,7 +631,16 @@ class LiveService:
         for key in completed[:-ADVICE_FUTURES_COMPLETED_KEPT]:
             self.advice_futures.pop(key, None)
 
-    def request_advice(self):
+    def request_advice(self, advisory_mode="composed"):
+        # The advisory contract is an explicit operator choice per request.
+        # The defect-type profile only gates AVAILABILITY of the reviewed
+        # A/B check contract; the record's contents never select the mode.
+        if advisory_mode not in ("composed", "vision_choice"):
+            raise ValueError("Unknown advisory mode.")
+        if (advisory_mode == "vision_choice"
+                and not getattr(self.args, "defect_type_profile", None)):
+            raise ValueError(
+                "Reviewed-check advice requires starting the app with a defect-type profile.")
         with self.lock:
             latest, root = self.latest, self.latest_root
             if (not self.llama_ready or self.busy or not latest
@@ -647,6 +656,23 @@ class LiveService:
             if (record["inspection_id"] != latest["inspection_id"]
                     or self.store.get_inspection(record["inspection_id"]) != record):
                 raise ValueError("Inspection record does not match SQLite")
+            # Early, explicit eligibility checks so the operator gets a clear
+            # refusal instead of a spawned attempt that fails. These validate
+            # the chosen contract; they never switch it.
+            from forgesight.assist_vision import vision_context
+            assessment = record.get("assessment")
+            if advisory_mode == "composed" and assessment is not None:
+                raise ValueError(
+                    "This inspection carries a provisional defect assessment, "
+                    "which composed advice refuses. Choose the reviewed-check "
+                    "mode explicitly if that is what you want.")
+            if advisory_mode == "vision_choice" and (
+                    not isinstance(assessment, dict)
+                    or assessment.get("scope") != "PROVISIONAL_BENCHMARK_IMAGE"
+                    or vision_context(record) is None):
+                raise ValueError(
+                    "Reviewed-check advice requires a valid provisional "
+                    "benchmark assessment on this inspection.")
             output = self.advice_root / record["inspection_id"]
             pending = self.advice_futures.get(record["inspection_id"])
             if pending is not None and not pending.done():
@@ -692,19 +718,10 @@ class LiveService:
                        # time count against the shared budget too.
                        "--request-deadline-monotonic",
                        str(time.monotonic() + self.args.llama_timeout_seconds + 45)]
-            # Per-request caller selection: the defect-type profile is an
-            # availability gate, not a force. Only a record carrying a
-            # provisional benchmark assessment takes the reviewed A/B check
-            # contract; every other record keeps the composed v5 default.
-            # Neither mode falls back to the other: an invalid assessment
-            # refuses in vision_choice and an assessed record refuses in
-            # composed, so a mixed record set can never silently switch
-            # contracts.
-            assessment = record.get("assessment")
-            if (getattr(self.args, "defect_type_profile", None)
-                    and isinstance(assessment, dict)
-                    and assessment.get("scope") == "PROVISIONAL_BENCHMARK_IMAGE"):
-                command += ["--advisory-mode", "vision_choice"]
+            # The operator's explicit per-request choice is passed through
+            # verbatim; the contract itself still refuses an invalid
+            # assessment in vision_choice and an assessed record in composed.
+            command += ["--advisory-mode", advisory_mode]
             if getattr(self.args, "llama_worker_socket", None) is not None:
                 if self.advice_worker is not None and self.advice_worker.poll() is None:
                     command += ["--llama-worker-socket", str(self.args.llama_worker_socket)]
@@ -734,6 +751,7 @@ class LiveService:
                    if latest and latest.get("inspection_id") else [])
         return {"camera": self.camera.state(), "busy": busy, "latest": latest,
                 "manual_reviews": reviews,
+                "vision_advice_available": bool(getattr(self.args, "defect_type_profile", None)),
                 "advice": self.advice_state(),
                 "replay_samples": sorted(self.replay_samples),
                 "local_replay_samples": self.local_replay_samples,
@@ -1236,11 +1254,20 @@ def handler_for(service):
                 self.send(200, json.dumps(service.camera.state()).encode(), "application/json")
                 return
             if self.path == "/api/advice":
-                if self.headers.get("Content-Length", "0") != "0":
-                    self.send(400, b"Invalid request", "text/plain")
-                    return
+                advisory_mode = "composed"
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                if length:
+                    if length > 1024:
+                        self.send(400, b"Invalid request", "text/plain")
+                        return
+                    try:
+                        body = json.loads(self.rfile.read(length))
+                        advisory_mode = body["mode"]
+                    except (ValueError, TypeError, KeyError, AttributeError):
+                        self.send(400, b"Invalid request", "text/plain")
+                        return
                 try:
-                    status = service.request_advice()
+                    status = service.request_advice(advisory_mode)
                 except ValueError as error:
                     code, body = _refusal_body("/api/advice", error, safe=True)
                     self.send(code, body.encode(), "application/json")

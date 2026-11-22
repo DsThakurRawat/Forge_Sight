@@ -9,12 +9,13 @@ Two advisory contracts coexist and the caller chooses explicitly:
   carry a provisional classifier assessment with a scoped
   `UNSUPPORTED_ASSESSED_RECORD` refusal instead of silently switching paths.
 - **Vision choice (output policy vision v1).** The defect-type profile is an
-  availability gate, not a force. When the app is started with the profile,
-  each advice request selects explicitly: a record carrying a provisional
-  benchmark assessment takes `--advisory-mode vision_choice`, and every other
-  record keeps the composed default. Neither mode falls back to the other -
-  an invalid assessment refuses in vision choice and an assessed record
-  refuses in composed.
+  availability gate, not a force: starting the app with the profile adds a
+  separate "Choose a reviewed check instead" control. The operator picks the
+  contract for each request; record contents never select it. The server
+  validates the choice - vision choice requires a valid provisional benchmark
+  assessment on that inspection, and composed refuses an assessed record -
+  and neither mode falls back to the other. The saved report records the
+  selected mode.
 
 The A/B device evidence below was recorded before this integration; a fresh
 on-device run covering both contracts and the camera loop is still pending.
