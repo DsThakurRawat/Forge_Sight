@@ -332,6 +332,7 @@ def main():
     deadline = args.request_deadline_monotonic
     report = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
               "status": "ADVICE_UNAVAILABLE", "source_mode": source_mode,
+              "advisory_mode": args.advisory_mode,
               "persistent_worker_unhealthy": False,
               "physical_part_inspected": False, "inspection_id": record["inspection_id"],
               "inspection_sha256": canonical_hash(record), "inspection_file_sha256": sha256(args.record),

@@ -692,7 +692,18 @@ class LiveService:
                        # time count against the shared budget too.
                        "--request-deadline-monotonic",
                        str(time.monotonic() + self.args.llama_timeout_seconds + 45)]
-            if getattr(self.args, "defect_type_profile", None):
+            # Per-request caller selection: the defect-type profile is an
+            # availability gate, not a force. Only a record carrying a
+            # provisional benchmark assessment takes the reviewed A/B check
+            # contract; every other record keeps the composed v5 default.
+            # Neither mode falls back to the other: an invalid assessment
+            # refuses in vision_choice and an assessed record refuses in
+            # composed, so a mixed record set can never silently switch
+            # contracts.
+            assessment = record.get("assessment")
+            if (getattr(self.args, "defect_type_profile", None)
+                    and isinstance(assessment, dict)
+                    and assessment.get("scope") == "PROVISIONAL_BENCHMARK_IMAGE"):
                 command += ["--advisory-mode", "vision_choice"]
             if getattr(self.args, "llama_worker_socket", None) is not None:
                 if self.advice_worker is not None and self.advice_worker.poll() is None:

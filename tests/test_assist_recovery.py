@@ -621,6 +621,73 @@ class UiRecoveryTests(unittest.TestCase):
         service.advice_queue.close()
 
 
+class AdvisoryModeSelectionTests(unittest.TestCase):
+    """Caller-side contract selection: the defect-type profile gates
+    availability of the reviewed A/B check contract; each advice request
+    keeps the composed v5 default unless its own record carries a
+    provisional benchmark assessment. Neither mode falls back to the other."""
+
+    def service(self, profile, assessed):
+        from forgesight.jetson_live_ui import LiveService
+        from forgesight.assist_queue import AdvisoryQueue
+        from threading import Lock
+        with mock.patch.object(LiveService, "__init__", lambda self, *a, **k: None):
+            service = LiveService()
+        service.args = argparse.Namespace(
+            database=Path("db.sqlite3"), guidance=Path("guidance.json"),
+            llama_root=Path("/llama"), llama_timeout_seconds=240,
+            llama_worker_socket=None, defect_type_profile=profile)
+        service.llama_ready = True
+        service.advice_worker = None
+        service.advice_worker_boot_error = None
+        service.advice_queue = AdvisoryQueue()
+        service.advice_futures = {}
+        service.lock = Lock()
+        service.busy = False
+        service.advice_root = Path(tempfile.mkdtemp())
+        root = Path(tempfile.mkdtemp())
+        record = {"inspection_id": "insp-1", "status": "ANALYZED",
+                  "candidate": "ANOMALY_CANDIDATE",
+                  "source": {"mode": "USER_UPLOADED_IMAGE_DIAGNOSTIC"}}
+        if assessed:
+            record["assessment"] = {
+                "schema_version": 1, "scope": "PROVISIONAL_BENCHMARK_IMAGE",
+                "method": "four_type_forest", "defect_type": "scratch",
+                "severity": {"level": "HIGH"}}
+        (root / "record.json").write_text(json.dumps(record))
+        service.latest = {**record, "source_mode": record["source"]["mode"]}
+        service.latest_root = root
+        service.store = mock.Mock()
+        service.store.get_inspection.return_value = record
+        return service
+
+    def command_for(self, profile, assessed):
+        service = self.service(profile, assessed)
+        try:
+            with mock.patch("forgesight.jetson_live_ui.subprocess.run") as run:
+                status = service.request_advice()
+                self.assertEqual(status, "PENDING")
+                service.advice_futures["insp-1"].result(timeout=10)
+            return run.call_args.args[0]
+        finally:
+            service.advice_queue.close()
+
+    def test_plain_upload_with_profile_keeps_composed_default(self):
+        command = self.command_for(profile="configs/defect_type_mvtec_four_v1.json",
+                                   assessed=False)
+        self.assertNotIn("--advisory-mode", command)
+
+    def test_assessed_record_with_profile_selects_vision_choice(self):
+        command = self.command_for(profile="configs/defect_type_mvtec_four_v1.json",
+                                   assessed=True)
+        self.assertIn("--advisory-mode", command)
+        self.assertEqual(command[command.index("--advisory-mode") + 1], "vision_choice")
+
+    def test_assessed_record_without_profile_keeps_composed_default(self):
+        command = self.command_for(profile=None, assessed=True)
+        self.assertNotIn("--advisory-mode", command)
+
+
 class AdviceFuturesBoundTest(unittest.TestCase):
     """LiveService.advice_futures grew by one entry per inspection forever."""
 
