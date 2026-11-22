@@ -12,7 +12,7 @@ from forgesight.assist_once import DEFAULT_RUNTIME, advise_once
 from forgesight.edge_assets import fingerprint
 
 
-DEFAULT_PROTOCOL = Path('configs/forgeassist_scenarios_v1.json')
+DEFAULT_PROTOCOL = Path('configs/forgeassist_scenarios_v2.json')
 
 
 def write_json(path, document):
@@ -41,7 +41,7 @@ def evaluate(protocol_path, output, *, run_native=False, runtime_python=DEFAULT_
         raise FileExistsError('Choose a fresh evaluation directory; existing evidence is preserved.')
     protocol_bytes = protocol_path.read_bytes()
     protocol = json.loads(protocol_bytes)
-    if protocol['schema_version'] != 1 or protocol['protocol_id'] != 'forgeassist-refusal-scenarios-v1':
+    if protocol['schema_version'] != 1 or protocol['protocol_id'] != 'forgeassist-refusal-scenarios-v2':
         raise ValueError('Unrecognized advisory evaluation protocol.')
     sources, protected = {}, {}
     for name, reference in protocol['record_sources'].items():
