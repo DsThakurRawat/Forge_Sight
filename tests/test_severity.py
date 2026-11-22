@@ -56,7 +56,7 @@ class SeverityTests(unittest.TestCase):
         self.assertNotEqual(below['severity'], 'HIGH')
 
     def test_high_from_bbox_diagonal(self):
-        row = record(regions=[{'bbox_xywh_px': [0, 0, 100, 100], 'area_px': 500,
+        row = record(area=500, regions=[{'bbox_xywh_px': [0, 0, 100, 100], 'area_px': 500,
                                'bbox_diagonal_px': 141.4213562373095}])
         result = severity_assessment(row)
         self.assertEqual(result['severity'], 'HIGH')
@@ -102,3 +102,81 @@ class SeverityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SeverityMalformedEvidenceTests(unittest.TestCase):
+    """Malformed or contradictory evidence fails closed with ValueError."""
+
+    def test_missing_decision_fails_closed(self):
+        row = record()
+        del row['decision']
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_missing_policy_snapshot_fails_closed(self):
+        row = record()
+        row['decision'] = {'grade': 'REVIEW'}
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_region_not_a_dict_fails_closed(self):
+        with self.assertRaises(ValueError):
+            severity_assessment(record(regions=[['not', 'a', 'dict']]))
+
+    def test_region_missing_area_fails_closed(self):
+        with self.assertRaises(ValueError):
+            severity_assessment(record(regions=[{'bbox_xywh_px': [10, 10, 10, 10],
+                                                'bbox_diagonal_px': 14.142135623730951}]))
+
+    def test_region_missing_bbox_fails_closed(self):
+        with self.assertRaises(ValueError):
+            severity_assessment(record(regions=[{'area_px': 100,
+                                                'bbox_diagonal_px': 14.142135623730951}]))
+
+    def test_regions_not_a_list_fails_closed(self):
+        row = record()
+        row['geometry']['regions'] = 'not-a-list'
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_total_without_regions_fails_closed(self):
+        row = record(area=100)
+        row['geometry']['regions'] = []
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_regions_without_total_fails_closed(self):
+        row = record(area=0)
+        row['geometry']['regions'] = [{'bbox_xywh_px': [10, 10, 10, 10], 'area_px': 5,
+                                       'bbox_diagonal_px': 14.142135623730951}]
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_region_sum_disagreement_fails_closed(self):
+        row = record(area=100)
+        row['geometry']['regions'].append({'bbox_xywh_px': [30, 30, 10, 10], 'area_px': 50,
+                                           'bbox_diagonal_px': 14.142135623730951})
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_below_threshold_score_fails_closed(self):
+        # An anomaly candidate with a score below the recorded image threshold
+        # is contradictory evidence, not a LOW band result.
+        with self.assertRaises(ValueError):
+            severity_assessment(record(score=0.1))
+
+    def test_at_threshold_score_stays_low(self):
+        result = severity_assessment(record(score=0.2))
+        self.assertEqual(result['severity'], 'LOW')
+
+    def test_missing_score_fails_closed(self):
+        row = record()
+        del row['score']
+        with self.assertRaises(ValueError):
+            severity_assessment(row)
+
+    def test_missing_policy_key_fails_closed(self):
+        policy = deepcopy(POLICY)
+        del policy['critical_zones']
+        with self.assertRaises(ValueError):
+            severity_assessment(record(policy=policy))

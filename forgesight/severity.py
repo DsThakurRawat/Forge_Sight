@@ -37,32 +37,66 @@ def severity_assessment(record: dict, policy: dict = None) -> dict:
             or record.get('candidate') != 'ANOMALY_CANDIDATE'):
         return result('NONE', ['no flagged anomaly response'])
     if policy is None:
-        policy = record['decision']['policy_snapshot']
-    width, height = policy['source_size_px']
-    threshold = policy['image_threshold']
-    margin = policy['normal_review_margin_fraction']
-    score = record['score']
+        decision = record.get('decision')
+        policy = decision.get('policy_snapshot') if isinstance(decision, dict) else None
+    if not isinstance(policy, dict):
+        raise ValueError('Invalid or incomplete severity evidence.')
+    try:
+        width, height = policy['source_size_px']
+        threshold = policy['image_threshold']
+        margin = policy['normal_review_margin_fraction']
+        reject_area_fraction = policy['reject_response_area_fraction']
+        reject_diagonal = policy['reject_bbox_diagonal_px']
+        critical_zones = policy['critical_zones']
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError('Invalid or incomplete severity evidence.') from exc
+    score = record.get('score')
     geometry = record.get('geometry')
-    if (not isinstance(score, (float, int)) or not math.isfinite(score)
+    if (type(score) not in (int, float) or not math.isfinite(score)
+            or type(threshold) not in (int, float) or not math.isfinite(threshold)
+            or type(margin) not in (int, float) or not math.isfinite(margin)
             or not isinstance(geometry, dict)):
         raise ValueError('Invalid or incomplete severity evidence.')
-    total = geometry['total_area_px']
-    regions = geometry['regions']
-    if (type(total) is not int or not 0 <= total <= width * height
-            or any(type(region['area_px']) is not int or region['area_px'] <= 0
-                   for region in regions)):
+    total = geometry.get('total_area_px')
+    regions = geometry.get('regions')
+    if type(total) is not int or not 0 <= total <= width * height or not isinstance(regions, list):
         raise ValueError('Invalid or incomplete severity evidence.')
-    if not total or not regions:
+    summed = 0
+    for region in regions:
+        if not isinstance(region, dict):
+            raise ValueError('Invalid or incomplete severity evidence.')
+        area = region.get('area_px')
+        bbox = region.get('bbox_xywh_px')
+        diagonal = region.get('bbox_diagonal_px')
+        if (type(area) is not int or area <= 0
+                or not isinstance(bbox, (list, tuple)) or len(bbox) != 4
+                or any(type(v) is not int for v in bbox)
+                or type(diagonal) not in (int, float) or not math.isfinite(diagonal)):
+            raise ValueError('Invalid or incomplete severity evidence.')
+        summed += area
+    if summed != total:
+        raise ValueError('Region and total areas disagree.')
+    if not total:
         return result('NONE', ['no flagged anomaly response'])
+    if score < threshold and not math.isclose(score, threshold, rel_tol=1e-9):
+        raise ValueError('Score below the recorded image threshold contradicts the flagged anomaly candidate.')
 
     basis = []
     area_fraction = total / (width * height)
-    if area_fraction >= policy['reject_response_area_fraction']:
+    if area_fraction >= reject_area_fraction:
         basis.append(f'response area fraction {area_fraction:.6f} reaches the recorded reject cutoff')
     longest = max(region['bbox_diagonal_px'] for region in regions)
-    if longest >= policy['reject_bbox_diagonal_px']:
+    if longest >= reject_diagonal:
         basis.append(f'largest region bbox diagonal {longest!r} px reaches the recorded reject cutoff')
-    zones = [zone['name'] for zone in policy['critical_zones']
+    if not isinstance(critical_zones, list):
+        raise ValueError('Invalid or incomplete severity evidence.')
+    for zone in critical_zones:
+        zone_bbox = zone.get('bbox_xywh_px') if isinstance(zone, dict) else None
+        if (not isinstance(zone, dict) or not isinstance(zone.get('name'), str)
+                or not isinstance(zone_bbox, (list, tuple)) or len(zone_bbox) != 4
+                or any(type(v) is not int for v in zone_bbox)):
+            raise ValueError('Invalid or incomplete severity evidence.')
+    zones = [zone['name'] for zone in critical_zones
              if any(_overlap(region['bbox_xywh_px'], zone['bbox_xywh_px']) for region in regions)]
     for name in zones:
         basis.append(f'response overlaps critical zone {name}')
