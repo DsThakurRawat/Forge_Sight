@@ -692,6 +692,8 @@ class LiveService:
                        # time count against the shared budget too.
                        "--request-deadline-monotonic",
                        str(time.monotonic() + self.args.llama_timeout_seconds + 45)]
+            if getattr(self.args, "defect_type_profile", None):
+                command += ["--advisory-mode", "vision_choice"]
             if getattr(self.args, "llama_worker_socket", None) is not None:
                 if self.advice_worker is not None and self.advice_worker.poll() is None:
                     command += ["--llama-worker-socket", str(self.args.llama_worker_socket)]

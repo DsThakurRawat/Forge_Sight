@@ -8,14 +8,12 @@ import json
 from pathlib import Path
 
 from PIL import Image
-import torch
 
 from forgesight.data_manifest import DEFAULT_MANIFEST, DEFAULT_ROOT, read_manifest, safe_path
 from forgesight.defect_type import (FEATURE_NAMES, FOREST_FEATURES, FOUR_TYPES, LABELS, four_type_features,
                                     load_profile, predict_type, response_features)
 from forgesight.regions import response_regions
 from scripts.build_mvtec_defect_type_split import PROTOCOL, build_split
-from scripts.probe_defect_type_features import MODEL_SHA256, infer
 
 
 SPLITS = ("train", "validation", "test")
@@ -215,6 +213,8 @@ def main():
     samples = (load_mvtec_experiment(args.split, args.dataset_root) if args.mvtec_subtype_experiment
                else load_split(args.split, DEFAULT_MANIFEST))
     threshold = json.loads(Path("configs/forgegrade_v1.json").read_text(encoding="utf-8"))["image_threshold"]
+    import torch
+    from scripts.probe_defect_type_features import MODEL_SHA256, infer
     torch.set_num_threads(2)
     model = torch.jit.load(str(args.model), map_location="cpu").eval()
     rows = defaultdict(list)

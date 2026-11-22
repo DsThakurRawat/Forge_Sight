@@ -15,7 +15,8 @@ DEFAULT_RUNTIME = Path('/root/.cache/forgesight/et1.5.1/venv/bin/python')
 
 
 def advise_once(record_path: Path, output: Path, *, guidance_path=DEFAULT_GUIDANCE,
-                runtime_python=DEFAULT_RUNTIME, timeout=90.0, max_new_tokens=96) -> dict:
+                runtime_python=DEFAULT_RUNTIME, timeout=90.0, max_new_tokens=96,
+                advisory_mode='composed') -> dict:
     if output.exists():
         raise FileExistsError('Choose a new advice output directory; previous evidence is preserved.')
     if not 0 < timeout <= 300 or type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 128:
@@ -28,7 +29,7 @@ def advise_once(record_path: Path, output: Path, *, guidance_path=DEFAULT_GUIDAN
     context = None
     refusal = None
     try:
-        context = prepare_advisory(record, guidance)
+        context = prepare_advisory(record, guidance, mode=advisory_mode)
     except AdvisoryRefusal as exc:
         refusal = {'code': exc.code, 'message': str(exc)}
     output.mkdir(parents=True, exist_ok=False)

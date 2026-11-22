@@ -123,6 +123,16 @@ images had already been scored in the original detector benchmark. The new
 test split is separate from subtype fitting and measures within-MVTec behavior.
 Use a separate camera-domain dataset to evaluate transfer to physical parts.
 
+Holdout scope: the 111 images are the detector's frozen final-holdout
+evaluation set (`metal-nut-frozen-holdout-v1`), repartitioned 66/21/24 for the
+classifier. The same 24-image test subset has reported numbers for successive
+classifier candidates (the two-type tree and the four-type forest), so those
+numbers come from small, repeatedly evaluated holdout-derived samples. The
+detector's frozen-threshold metrics are unaffected: the classifier only
+consumes detector outputs and changes no detector artifact. Classifier
+accuracy remains provisional until confirmed on fresh images none of the
+candidates has seen.
+
 ```powershell
 python -B -m scripts.build_mvtec_defect_type_split --output artifacts/vision/mvtec_subtype_split_check.json
 python -B -m scripts.train_defect_type --mvtec-subtype-experiment --split manifests/metal_nut_defect_type_split_v1.json --model artifacts/vision/edge_export_v1/efficientad_s_calibrated.ts --output artifacts/vision/defect_type_mvtec_v1

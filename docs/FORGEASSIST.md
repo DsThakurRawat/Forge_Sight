@@ -2,6 +2,20 @@
 
 ## Vision-grounded Jetson advice
 
+Two advisory contracts coexist and the caller chooses explicitly:
+
+- **Composed (default, output policy v5).** The model composes the operator
+  note from cited evidence under the v5 validators. It refuses records that
+  carry a provisional classifier assessment with a scoped
+  `UNSUPPORTED_ASSESSED_RECORD` refusal instead of silently switching paths.
+- **Vision choice (output policy vision v1).** Available only when the app is
+  started with the defect-type profile, which passes `--advisory-mode
+  vision_choice`. The record must then carry a valid provisional benchmark
+  assessment. The mode is never inferred from record contents.
+
+The A/B device evidence below was recorded before this integration; a fresh
+on-device run covering both contracts and the camera loop is still pending.
+
 Launch the operator app with the [four-type severity profile](DEFECT_SEVERITY.md).
 After a flagged benchmark inspection, select **Generate Llama advice**.
 ForgeAssist passes the provisional type, severity, approximate location and

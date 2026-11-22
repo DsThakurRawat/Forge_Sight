@@ -7,6 +7,8 @@ import math
 from pathlib import Path
 import re
 
+from forgesight.assist_vision import (VISION_GUIDE_ID, VISION_OUTPUT_POLICY, VISION_PROMPT_VERSION,
+                                     vision_context, vision_note)
 from forgesight.grade import grade_record
 from forgesight.severity import severity_assessment
 
@@ -100,9 +102,9 @@ def _value_mentions(text):
     return mentions
 
 
-def prepare_advisory(record: dict, guidance: dict) -> dict:
+def prepare_advisory(record: dict, guidance: dict, *, mode: str = 'composed') -> dict:
     try:
-        return _prepare_advisory(record, guidance)
+        return _prepare_advisory(record, guidance, mode=mode)
     except AdvisoryRefusal:
         raise
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
@@ -110,8 +112,10 @@ def prepare_advisory(record: dict, guidance: dict) -> dict:
                               'Inspection or guidance metadata is invalid or incomplete.') from exc
 
 
-def _prepare_advisory(record: dict, guidance: dict) -> dict:
+def _prepare_advisory(record: dict, guidance: dict, *, mode: str = 'composed') -> dict:
     """Only trusted numerical/enumerated facts enter the prompt; free-text IDs/notes do not."""
+    if mode not in ('composed', 'vision_choice'):
+        raise ValueError('Unknown advisory mode.')
     if not isinstance(record, dict) or not record or not isinstance(guidance, dict):
         raise AdvisoryRefusal('INVALID_OR_INCOMPLETE_EVIDENCE', 'Expected inspection and guidance objects.')
     if record.get('status') != 'ANALYZED':
@@ -146,6 +150,11 @@ def _prepare_advisory(record: dict, guidance: dict) -> dict:
         raise AdvisoryRefusal('INVALID_EVIDENCE_FOR_ADVICE', 'Invalid evidence cannot be presented as an analyzed defect event.')
     if canonical_hash(guidance) != GUIDANCE_DOCUMENT_SHA256:
         raise AdvisoryRefusal('UNRECOGNIZED_GUIDANCE', 'Guidance content differs from the reviewed prototype document; advice is withheld.')
+    if mode == 'vision_choice':
+        return _prepare_vision_advisory(record, guidance, source_mode, decision)
+    if record.get('assessment') is not None:
+        raise AdvisoryRefusal('UNSUPPORTED_ASSESSED_RECORD',
+                              'Record carries a provisional classifier assessment; request the vision-choice advisory mode explicitly.')
     entries = [entry for entry in guidance['entries'] if entry['candidate'] == record['candidate'] and entry['grade'] == decision['grade']]
     guide_id = 'G2' if benchmark else 'G1'
     if len(entries) != 1 or entries[0]['id'] != guide_id:
@@ -211,6 +220,47 @@ def _prepare_advisory(record: dict, guidance: dict) -> dict:
             'image_supplied_to_llama': False, 'quality_grade_authority': 'DETERMINISTIC_RULES_ONLY'}
 
 
+def _prepare_vision_advisory(record, guidance, source_mode, decision):
+    """Reviewed A/B check choice for records with a valid provisional benchmark assessment."""
+    vision = vision_context(record)
+    if vision is None:
+        raise AdvisoryRefusal('UNSUPPORTED_VISION_EVIDENCE',
+                              'The vision-choice advisory requires a valid provisional benchmark assessment.')
+    facts, choices, prompt = vision
+    return {'schema_version': 1, 'prompt_version': VISION_PROMPT_VERSION,
+            'output_policy_version': VISION_OUTPUT_POLICY,
+            'source_mode': source_mode,
+            'inspection_id': record['inspection_id'], 'inspection_sha256': canonical_hash(record),
+            'authoritative_decision': deepcopy(decision), 'decision_sha256': canonical_hash(decision),
+            'evidence': {'E1': {'inspection_id': record['inspection_id'], 'record_sha256': canonical_hash(record),
+                                'candidate': record['candidate'], 'predicted_defect_type': 'unknown',
+                                'vision_assessment': facts},
+                         VISION_GUIDE_ID: {'document_id': VISION_OUTPUT_POLICY,
+                                           'approval_status': guidance['approval_status'],
+                                           'actions': choices}},
+            'prompt_text': prompt,
+            'system_text': 'Choose the best first image inspection check. Reply with A or B only.',
+            'model_received_fields': ['provisional_type', 'provisional_severity', 'approximate_location',
+                                      'response_extent', 'reviewed_action_choices'],
+            'score_and_geometry_in_prompt': False, 'geometry_in_prompt': True, 'max_new_tokens': 2,
+            'image_supplied_to_llama': False, 'quality_grade_authority': 'DETERMINISTIC_RULES_ONLY'}
+
+
+def _base_advisory(context, note, evidence_ids):
+    return {'schema_version': 1, 'status': 'GENERATED_REQUIRES_HUMAN_REVIEW',
+            'inspection_id': context['inspection_id'], 'inspection_sha256': context['inspection_sha256'],
+            'authoritative_grade': context['authoritative_decision']['grade'],
+            'decision_sha256': context['decision_sha256'],
+            'response': {'generated_note': note, 'evidence_ids': evidence_ids,
+                         'possible_explanation': None,
+                         'possible_explanation_origin': 'HOST_WITHHELD_NO_CAUSAL_EVIDENCE'},
+            'guidance_approval': 'PROTOTYPE_NOT_FACTORY_APPROVED',
+            'output_policy_version': context['output_policy_version'],
+            'validation_scope': 'HOST_COMPOSED_EVIDENCE_STATEMENTS_NOT_GENERAL_REASONING_OR_DIAGNOSIS',
+            'quality_grade_authority': 'DETERMINISTIC_RULES_ONLY',
+            'model_saw_image': False, 'jetson_verified': False}
+
+
 def parse_advisory(raw: str, context: dict) -> dict:
     """The host owns JSON; the model composes a short cited note, never a grade.
 
@@ -225,6 +275,15 @@ def parse_advisory(raw: str, context: dict) -> dict:
         cleaned = cleaned[:-len('<|eot_id|>')].strip()
     if '<|' in cleaned or '|>' in cleaned:
         raise ValueError('Unexpected generated control markers.')
+    if context['output_policy_version'] == VISION_OUTPUT_POLICY:
+        if not re.fullmatch(r'[AB]\.?', cleaned):
+            raise ValueError('Expected one reviewed vision action choice.')
+        choice = cleaned[0]
+        actions = context['evidence'][VISION_GUIDE_ID]['actions']
+        advisory = _base_advisory(context, vision_note(choice, actions), ['E1', VISION_GUIDE_ID])
+        advisory['response']['note_origin'] = 'LLAMA_SELECTED_REVIEWED_CHECK'
+        advisory['response']['model_action_choice'] = choice
+        return advisory
     if not 1 <= len(cleaned) <= 800 or any(mark in cleaned for mark in ('{', '}', '```')):
         raise ValueError('Expected a bounded plain-text advisory, not JSON or formatting instructions.')
     citations = re.findall(r'\[([^\]]*)\]', cleaned)
@@ -279,15 +338,4 @@ def parse_advisory(raw: str, context: dict) -> dict:
         raise ValueError('Generated note contradicts the benchmark grade.')
     if context['authoritative_decision']['grade'] == 'REVIEW' and ('benchmark' in word_set or 'grade reject' in normalized):
         raise ValueError('Generated note contradicts the review grade.')
-    return {'schema_version': 1, 'status': 'GENERATED_REQUIRES_HUMAN_REVIEW',
-            'inspection_id': context['inspection_id'], 'inspection_sha256': context['inspection_sha256'],
-            'authoritative_grade': context['authoritative_decision']['grade'],
-            'decision_sha256': context['decision_sha256'],
-            'response': {'generated_note': cleaned, 'evidence_ids': ['E1', guide_id],
-                         'possible_explanation': None,
-                         'possible_explanation_origin': 'HOST_WITHHELD_NO_CAUSAL_EVIDENCE'},
-            'guidance_approval': 'PROTOTYPE_NOT_FACTORY_APPROVED',
-            'output_policy_version': OUTPUT_POLICY_VERSION,
-            'validation_scope': 'HOST_COMPOSED_EVIDENCE_STATEMENTS_NOT_GENERAL_REASONING_OR_DIAGNOSIS',
-            'quality_grade_authority': 'DETERMINISTIC_RULES_ONLY',
-            'model_saw_image': False, 'jetson_verified': False}
+    return _base_advisory(context, cleaned, ['E1', guide_id])

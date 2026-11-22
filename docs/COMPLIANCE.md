@@ -7,6 +7,10 @@ the physical Jetson in a loopback-only application namespace. Six paired
 inspections preserved exact detector scores, source maps, overlays, and
 ForgeGrade decisions. The frozen detector missed the scratch preview.
 Independent type accuracy and physical-camera subtype validation remain open.
+The classifier split repartitions the detector's 111-image frozen final
+holdout (66/21/24), and the same 24-image test has evaluated successive
+classifier candidates; detector metrics are unchanged, but classifier numbers
+are provisional until confirmed on fresh images.
 See [defect-type evidence and commands](DEFECT_TYPE.md).
 
 The within-MVTec depth-3 tree reproduced the PC type outputs on the isolated

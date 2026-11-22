@@ -289,6 +289,9 @@ def main():
     parser.add_argument("--llama-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--llama-timeout-seconds", type=float, default=240)
+    parser.add_argument("--advisory-mode", default="composed", choices=("composed", "vision_choice"),
+                        help="Advisory contract: composed v5 note (default) or reviewed A/B check "
+                             "choice for records carrying a valid provisional assessment.")
     parser.add_argument("--llama-worker-socket", type=Path, default=None,
                         help="Persistent advisory worker socket; omit for the cold subprocess path")
     parser.add_argument("--request-deadline-monotonic", type=float, default=None,
@@ -340,7 +343,7 @@ def main():
               "inspection_and_sqlite_unchanged": False, "async_queue_implemented": False,
               "offline_disconnection_verified": False}
     try:
-        context = prepare_advisory(record, guidance)
+        context = prepare_advisory(record, guidance, mode=args.advisory_mode)
     except AdvisoryRefusal as error:
         report["input_refusal"] = {"code": error.code, "message": str(error)}
         context = None

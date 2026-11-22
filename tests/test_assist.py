@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from forgesight.assist_contract import (DEFAULT_GUIDANCE, canonical_hash,
+from forgesight.assist_contract import (AdvisoryRefusal, DEFAULT_GUIDANCE, canonical_hash,
                                         parse_advisory, prepare_advisory)
 from forgesight.assist_once import advise_once
 from forgesight.assist_evaluate import DEFAULT_PROTOCOL, evaluate
@@ -56,7 +56,7 @@ class AssistContractTests(unittest.TestCase):
             with self.subTest(label=label):
                 row = self.vision_record(label, 'inner rim' if label == 'scratch' else 'annular face')
                 original = deepcopy(row)
-                context = prepare_advisory(row, self.guidance)
+                context = prepare_advisory(row, self.guidance, mode='vision_choice')
                 self.assertEqual(context['output_policy_version'], VISION_OUTPUT_POLICY)
                 self.assertEqual(context['authoritative_decision'], original['decision'])
                 self.assertEqual(row, original)
@@ -67,9 +67,22 @@ class AssistContractTests(unittest.TestCase):
                 self.assertEqual(note['response']['evidence_ids'], ['E1', 'G3'])
                 self.assertEqual(note['response']['note_origin'], 'LLAMA_SELECTED_REVIEWED_CHECK')
 
+    def test_composed_mode_refuses_assessed_records_and_vision_requires_assessment(self):
+        row = self.vision_record('scratch')
+        with self.assertRaises(AdvisoryRefusal) as raised:
+            prepare_advisory(row, self.guidance)
+        self.assertEqual(raised.exception.code, 'UNSUPPORTED_ASSESSED_RECORD')
+        row = deepcopy(self.record)
+        row['source'].update(mode='SAVED_IMAGE_REPLAY', physical_part=False)
+        with self.assertRaises(AdvisoryRefusal) as raised:
+            prepare_advisory(row, self.guidance, mode='vision_choice')
+        self.assertEqual(raised.exception.code, 'UNSUPPORTED_VISION_EVIDENCE')
+        with self.assertRaises(ValueError):
+            prepare_advisory(row, self.guidance, mode='autopilot')
+
     def test_vision_rejects_out_of_policy_measurement_and_model_claims(self):
         row = self.vision_record('scratch')
-        context = prepare_advisory(row, self.guidance)
+        context = prepare_advisory(row, self.guidance, mode='vision_choice')
         self.assertIn('Response extent', context['prompt_text'])
         self.assertIn('inner rim', context['prompt_text'])
         for text in ('Here is A', 'A or B', 'C', 'A. The thread is damaged.', 'B [G2]'):
@@ -77,7 +90,7 @@ class AssistContractTests(unittest.TestCase):
                 parse_advisory(text, context)
         row['assessment']['severity']['evidence']['ratio'] = 0.99
         with self.assertRaises(ValueError):
-            prepare_advisory(row, self.guidance)
+            prepare_advisory(row, self.guidance, mode='vision_choice')
 
     def test_uploaded_anomaly_is_eligible_without_changing_review_grade(self):
         row = deepcopy(self.record)

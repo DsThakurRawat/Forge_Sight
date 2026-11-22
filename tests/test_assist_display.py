@@ -86,7 +86,7 @@ class AdviceDisplayTests(unittest.TestCase):
             'schema_version': 1, 'scope': 'PROVISIONAL_BENCHMARK_IMAGE', 'method': 'four_type_forest',
             'defect_type': 'scratch', 'severity': assess_severity('scratch', row['geometry'], (500, 250_000)),
         }
-        context = prepare_advisory(row, json.loads(DEFAULT_GUIDANCE.read_text()))
+        context = prepare_advisory(row, json.loads(DEFAULT_GUIDANCE.read_text()), mode='vision_choice')
         result = parse_advisory('A', context)
         result.update(jetson_verified=True, source_mode=row['source']['mode'])
         self.report.update(advisory=result, inspection_id=row['inspection_id'],

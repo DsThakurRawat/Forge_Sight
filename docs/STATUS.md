@@ -2,6 +2,14 @@
 
 ## Current stage
 
+The classifier, provisional severity and vision-choice advisory are integrated
+with the composed v5 advisory contract on main: v5 stays the default, the A/B
+mode is explicit-only, and records carrying an assessment must be routed
+explicitly. The displayed severity remains the policy-cutoff pixel-response
+label with its prototype qualifier; type-conditioned severity is shown only as
+clearly scoped provisional metadata. All Jetson evidence below predates this
+integration, so a fresh on-device run of the combined build is pending.
+
 ForgeAssist receives type, severity, location and response extent from saved
 benchmark inspections. In an offline Jetson check, the ExecuTorch worker
 selected a concrete inspection check for each of the four defect types and
