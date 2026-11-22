@@ -13,7 +13,7 @@ from forgesight.severity import severity_assessment
 
 DEFAULT_GUIDANCE = Path('guidance/prototype_inspection_v2.json')
 PROMPT_VERSION = 'forgeassist-system-cited-note-v3'
-OUTPUT_POLICY_VERSION = 'forgeassist-evidence-composed-note-v4'
+OUTPUT_POLICY_VERSION = 'forgeassist-evidence-composed-note-v5'
 # Canonical document hash, independent of JSON whitespace/Windows line endings.
 # A changed procedure requires deliberate review/versioning, not just the same ID.
 GUIDANCE_DOCUMENT_SHA256 = '2cec35633827ff89f10d2d6e5c32629bd9e761fcaa9365bf3d8a0ba724d0eeb2'
@@ -64,9 +64,40 @@ def _location_words(bbox, size):
     return f'{y_word} {x_word}'
 
 
-def _number_tokens(text):
-    """Numeric tokens, normalized by stripping trailing unit/punctuation marks."""
-    return {token.rstrip('.,%') for token in re.findall(r'\d+(?:[.,%]\d+)*', text)}
+LABEL_WORDS = {'score', 'threshold', 'area', 'width', 'height', 'x', 'y', 'percent'}
+UNIT_WORDS = {'px', 'region', 'regions'}
+
+
+def _value_mentions(text):
+    """(label, value, unit) triples for every numeric token.
+
+    The unit comes from the token itself (a trailing %) or the word right
+    after it (px, region, regions); the label is the nearest preceding
+    non-connector label word (score, threshold, area, ...). A supplied value
+    attached to a different quantity or unit in the note than in the prompt
+    does not match, so area pixels cannot be restated as a score and no unit
+    can be added or dropped.
+    """
+    tokens = re.findall(r'[a-z]+|\d+(?:\.\d+)?%?', text.lower())
+    mentions = set()
+    for index, token in enumerate(tokens):
+        if not token[0].isdigit():
+            continue
+        value = token.rstrip('%')
+        unit = '%' if token.endswith('%') else ''
+        if not unit and index + 1 < len(tokens) and tokens[index + 1] in UNIT_WORDS:
+            unit = tokens[index + 1]
+        label = None
+        back = index - 1
+        while back >= 0:
+            word = tokens[back]
+            if word in CONNECTOR_WORDS:
+                back -= 1
+                continue
+            label = word if word in LABEL_WORDS else None
+            break
+        mentions.add((label, value, unit))
+    return mentions
 
 
 def prepare_advisory(record: dict, guidance: dict) -> dict:
@@ -183,10 +214,11 @@ def _prepare_advisory(record: dict, guidance: dict) -> dict:
 def parse_advisory(raw: str, context: dict) -> dict:
     """The host owns JSON; the model composes a short cited note, never a grade.
 
-    Composition is bounded: every number must match a supplied value exactly,
-    every content word must come from the prompt or the connector whitelist,
-    the checklist must be restated, the supplied severity must be named
-    without contradiction, and unknown type/cause stays explicit.
+    Composition is bounded: every value mention must match a supplied
+    quantity, value and unit exactly, every content word must come from the
+    prompt or the connector whitelist, the checklist must be restated in
+    order, the supplied severity must be named without contradiction, and
+    unknown type/cause stays explicit.
     """
     cleaned = raw.strip()
     if cleaned.endswith('<|eot_id|>'):
@@ -200,13 +232,13 @@ def parse_advisory(raw: str, context: dict) -> dict:
     if set(citations) != {'E1', guide_id}:
         raise ValueError('Advisory cites unknown or missing evidence.')
     text = re.sub(r'\[(E1|G1|G2)\]', '', cleaned)
-    prompt_numbers = _number_tokens(context['prompt_text'])
-    note_numbers = _number_tokens(text)
-    invented = note_numbers - prompt_numbers
-    if invented:
-        raise ValueError('The note includes measurements or values that were not supplied.')
-    if not note_numbers:
+    prompt_mentions = _value_mentions(context['prompt_text'])
+    note_mentions = _value_mentions(text)
+    if not note_mentions:
         raise ValueError('The note cites none of the supplied measurements or values.')
+    if not note_mentions <= prompt_mentions:
+        raise ValueError('The note includes measurements or values that were not supplied, '
+                         'or attaches a supplied value to a different quantity or unit.')
     prompt_words = set(re.findall(r'[a-z]+', context['prompt_text'].lower()))
     permitted = prompt_words | CONNECTOR_WORDS
     words = re.findall(r'[a-z]+', text.lower())
@@ -217,19 +249,31 @@ def parse_advisory(raw: str, context: dict) -> dict:
     word_set = set(words)
     if not {'unknown', 'type', 'cause'} <= word_set:
         raise ValueError('Required uncertainty statement is missing.')
-    # "cause/type is <word>" may only conclude unknown; vocabulary alone
-    # would otherwise accept "the cause is lighting" from source words.
-    for match in re.finditer(r'\b(cause|type)\s+(?:is|was|are)\s+([a-z]+)', ' '.join(words)):
-        if match.group(2) != 'unknown':
+    # Every clause mentioning cause or type may conclude only "unknown",
+    # whatever the copula: clause-local content words beyond connectors and
+    # cause/type itself are limited to the unknown statement, so "the cause
+    # remains lighting" or "lighting is the cause" cannot assert a cause the
+    # evidence does not contain.
+    for clause in re.split(r'[.;!?\n]+', text.lower()):
+        clause_words = re.findall(r'[a-z]+', clause)
+        if not ({'cause', 'type'} & set(clause_words)):
+            continue
+        content = [word for word in clause_words
+                   if word not in CONNECTOR_WORDS and word not in ('cause', 'type')]
+        if 'unknown' not in content or not set(content) <= {'unknown', 'defect'}:
             raise ValueError('Generated note asserts a cause or type the evidence does not contain.')
     severity = context['evidence']['E1']['pixel_response_severity']['severity'].lower()
     if severity not in word_set or (SEVERITY_WORDS - {severity}) & word_set:
         raise ValueError('The note omits or contradicts the supplied severity.')
     if not word_set & {'score', 'area'}:
         raise ValueError('The note references none of the supplied size, location or score evidence.')
-    guidance_words = set(re.findall(r'[a-z]+', context['evidence'][guide_id]['text'].lower()))
-    if not guidance_words <= word_set:
-        raise ValueError('The required checklist step is missing.')
+    # The checklist is a procedure: its words must be restated in order
+    # (connectors may be interleaved), not merely present as a word set whose
+    # reordering could invert the instruction.
+    guidance_seq = re.findall(r'[a-z]+', context['evidence'][guide_id]['text'].lower())
+    note_iter = iter(words)
+    if not all(any(word == needed for word in note_iter) for needed in guidance_seq):
+        raise ValueError('The required checklist step is missing or restated out of order.')
     normalized = ' '.join(text.lower().split()).replace(' .', '.')
     if context['authoritative_decision']['grade'] == 'REJECT' and 'grade review' in normalized:
         raise ValueError('Generated note contradicts the benchmark grade.')

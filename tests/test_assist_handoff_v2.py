@@ -83,6 +83,52 @@ class HandoffV2Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_advisory(VALID.replace('type and cause are unknown', 'type is clear'), self.context)
 
+    def test_cause_assertion_via_alternate_copulas_rejected(self):
+        # The guard must not depend on the copula "is/was/are": any clause that
+        # concludes cause/type with anything but unknown is an assertion.
+        for claim in ('The cause remains lighting.', 'The cause should be lighting.',
+                      'The cause has been lighting.', 'The cause detected lighting.',
+                      'Lighting is the cause.'):
+            with self.subTest(claim=claim), self.assertRaises(ValueError):
+                parse_advisory(VALID + ' ' + claim, self.context)
+
+    def test_unknown_cause_statement_variants_accepted(self):
+        for ok in (VALID.replace('type and cause are unknown', 'defect type and cause unknown'),
+                   VALID.replace('type and cause are unknown', 'type and cause remain unknown')):
+            with self.subTest(ok=ok):
+                self.assertEqual(parse_advisory(ok, self.context)['status'],
+                                 'GENERATED_REQUIRES_HUMAN_REVIEW')
+
+    def test_supplied_value_on_wrong_quantity_rejected(self):
+        # 9015 is the supplied response area; it may not be presented as the score.
+        with self.assertRaises(ValueError):
+            parse_advisory(VALID.replace('Anomaly score 0.682809', 'Anomaly score 9015'),
+                           self.context)
+
+    def test_unit_injection_rejected(self):
+        # A percent sign changes the quantity: area is pixels, the score is unitless.
+        with self.assertRaises(ValueError):
+            parse_advisory(VALID.replace('Response area 9015 px',
+                                         'Response area 9015% of the frame'), self.context)
+        with self.assertRaises(ValueError):
+            parse_advisory(VALID.replace('Anomaly score 0.682809',
+                                         'Anomaly score 0.682809%'), self.context)
+
+    def test_checklist_scrambled_rejected(self):
+        # Same words, different order: the procedure meaning is not preserved.
+        scrambled = VALID.replace(
+            'Hold for human review; check image clarity and lighting; compare the '
+            'highlighted region with a known-good part',
+            'Compare lighting with a known-good part; check image clarity and the '
+            'highlighted region; hold for human review')
+        with self.assertRaises(ValueError):
+            parse_advisory(scrambled, self.context)
+
+    def test_checklist_restatement_with_interleaved_connectors_accepted(self):
+        interleaved = VALID.replace('check image clarity', 'please check image clarity')
+        self.assertEqual(parse_advisory(interleaved, self.context)['status'],
+                         'GENERATED_REQUIRES_HUMAN_REVIEW')
+
     def test_v1_guidance_is_no_longer_recognized(self):
         old = json.loads(Path('guidance/prototype_inspection_v1.json').read_text())
         with self.assertRaises(ValueError):
