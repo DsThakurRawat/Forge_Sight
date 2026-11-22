@@ -1,4 +1,4 @@
-# ForgeSight AI
+# ForgeSight 
 
 An incremental project for offline industrial surface-defect inspection on an
 NVIDIA Jetson Orin Nano, with deterministic grading, local inspection history,
